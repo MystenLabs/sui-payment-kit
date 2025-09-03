@@ -79,11 +79,11 @@ fun test_successful_payment_exact_amount() {
         let coin = create_test_coin(&mut scenario, 1000);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"12345"), // payment_id
             1000, // payment_amount
             coin,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -118,11 +118,11 @@ fun test_overpayment_failure() {
         let coin = create_test_coin(&mut scenario, 1500); // More than expected
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"67890"), // salt
             1000, // payment_amount - less than coin value
             coin,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -169,21 +169,21 @@ fun test_duplicate_payment_hash_failure() {
 
         // First payment with specific parameters should succeed
         let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"12345"),
             1000, // payment_amount
             coin1,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
         // Second payment with identical parameters should fail (same hash)
         let _receipt2 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"12345"), // Same salt
             1000, // Same payment_amount
             coin2,
             BOB, // Same receiver
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -216,11 +216,11 @@ fun test_insufficient_amount_failure() {
         let coin = create_test_coin(&mut scenario, 500); // Less than expected
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"12345"),
             1000, // Expected 1000 but coin only has 500
             coin,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -254,31 +254,31 @@ fun test_multiple_different_nonces() {
         // Process multiple payments with different salts
         let coin1 = create_test_coin(&mut scenario, 1000);
         let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"1"),
             1000,
             coin1,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
         let coin2 = create_test_coin(&mut scenario, 1500);
         let _receipt2 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"2"),
             1500,
             coin2,
             CHARLIE,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
         let coin3 = create_test_coin(&mut scenario, 500);
         let _receipt3 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"3"),
             500,
             coin3,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -313,11 +313,11 @@ fun test_zero_payment_amount() {
         let coin = create_test_coin(&mut scenario, 1000);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"12345"),
             1000, // payment amount
             coin,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -353,11 +353,11 @@ fun test_large_nonce_values() {
         // Test with large salt value
         let coin = create_test_coin(&mut scenario, 1000);
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             std::ascii::string(b"18446744073709551615"), // Large salt
             1000,
             coin,
             BOB,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -408,11 +408,11 @@ fun test_close_expired_receipt_success() {
         let receiver = BOB;
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             payment_id,
             payment_amount,
             coin,
             receiver,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -530,11 +530,11 @@ fun test_close_receipt_not_expired() {
         let receiver = BOB;
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             payment_id,
             payment_amount,
             coin,
             receiver,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -598,11 +598,11 @@ fun test_close_receipt_no_expiration() {
         let receiver = BOB;
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             payment_id,
             payment_amount,
             coin,
             receiver,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -667,11 +667,11 @@ fun test_30_day_expiration_duration() {
         let receiver = BOB;
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
             payment_id,
             payment_amount,
             coin,
             receiver,
-            &mut registry,
             test_scenario::ctx(&mut scenario),
         );
 

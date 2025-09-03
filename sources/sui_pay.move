@@ -18,51 +18,6 @@ public struct Namespace has key {
     id: UID,
 }
 
-/// Initializes the module, creating and sharing the Namespace object.
-fun init(ctx: &mut TxContext) {
-    transfer::share_object(Namespace { id: sui::object::new(ctx) });
-}
-
-#[test_only]
-/// Public version of init for testing
-public fun init_for_testing(ctx: &mut TxContext) {
-    init(ctx);
-}
-
-/// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
-/// They are stored in a DynamicField within the registry, under their respective key structs.
-public struct ReceiptConfigKey() has copy, drop, store;
-
-/// ReceiptConfig control whether receipts are written to the registry, and if so, whether they expire.
-public struct ReceiptConfig has copy, drop, store {
-    write_receipts: bool,
-    receipt_expiration_duration_ms: Option<u64>,
-}
-
-/// Creates a ReceiptConfig
-public fun create_receipt_config(
-    write_receipts: bool,
-    receipt_expiration_duration_ms: Option<u64>,
-): ReceiptConfig {
-    ReceiptConfig {
-        write_receipts,
-        receipt_expiration_duration_ms,
-    }
-}
-
-fun get_receipt_config(registry: &PaymentRegistry): Option<ReceiptConfig> {
-    let receipt_config_key = ReceiptConfigKey();
-    if (df::exists_(&registry.id, receipt_config_key)) {
-        let config: &ReceiptConfig = df::borrow(
-            &registry.id,
-            receipt_config_key,
-        );
-        option::some(*config)
-    } else {
-        option::none()
-    }
-}
-
 public struct RegistryAdminCap has key, store {
     id: UID,
     registry_id: ID,
@@ -88,35 +43,19 @@ public struct PaymentKey has copy, drop, store {
     receiver: address,
 }
 
-/// Creates a new PaymentKey
-public fun create_payment_key(
-    payment_id: String,
-    payment_amount: u64,
-    coin_type: String,
-    receiver: address,
-): PaymentKey {
-    PaymentKey {
-        payment_id,
-        payment_amount,
-        coin_type,
-        receiver,
-    }
+/// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
+/// They are stored in a DynamicField within the registry, under their respective key structs.
+public struct ReceiptConfigKey() has copy, drop, store;
+
+/// ReceiptConfig control whether receipts are written to the registry, and if so, whether they expire.
+public struct ReceiptConfig has copy, drop, store {
+    write_receipts: bool,
+    receipt_expiration_duration_ms: Option<u64>,
 }
 
-/// Creates a PaymentKey from a PaymentReceipt.
-///
-/// # Parameters
-/// * `receipt` - The payment receipt to derive the key from
-///
-/// # Returns
-/// A PaymentKey corresponding to the receipt. This is used to derive a DynamicField for the receipt.
-fun key_from_payment_receipt(receipt: &PaymentReceipt): PaymentKey {
-    PaymentKey {
-        payment_id: receipt.payment_id,
-        payment_amount: receipt.payment_amount,
-        coin_type: receipt.coin_type,
-        receiver: receipt.receiver,
-    }
+/// Initializes the module, creating and sharing the Namespace object.
+fun init(ctx: &mut TxContext) {
+    transfer::share_object(Namespace { id: sui::object::new(ctx) });
 }
 
 /// Creates a new payment registry
@@ -184,8 +123,8 @@ public fun set_receipt_config(
 ///
 /// # Aborts
 /// * If a receipt with the same payment parameters already exists in the registry
-public fun write_payment_receipt(receipt: PaymentReceipt, registry: &mut PaymentRegistry) {
-    let key = key_from_payment_receipt(&receipt);
+public fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
+    let key = receipt.to_key();
     assert!(!df::exists_(&registry.id, key), EReceiptAlreadyExists);
     df::add(
         &mut registry.id,
@@ -208,15 +147,15 @@ public fun write_payment_receipt(receipt: PaymentReceipt, registry: &mut Payment
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment_with_receipt<CoinType>(
+public fun process_payment_with_receipt<T>(
     payment_id: String,
     payment_amount: u64,
-    coin: Coin<CoinType>,
+    coin: Coin<T>,
     receiver: address,
     _ctx: &mut sui::tx_context::TxContext,
 ): PaymentReceipt {
     let coin_type = type_name::into_string(
-        type_name::with_defining_ids<CoinType>(),
+        type_name::with_defining_ids<T>(),
     );
 
     // If the coin amount does not match the expected payment amount, abort.
@@ -251,10 +190,10 @@ public fun process_payment_with_receipt<CoinType>(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment<CoinType>(
+public fun process_payment<T>(
     payment_id: String,
     payment_amount: u64,
-    coin: Coin<CoinType>,
+    coin: Coin<T>,
     receiver: address,
     _ctx: &mut TxContext,
 ) {
@@ -284,12 +223,12 @@ public fun process_payment<CoinType>(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment_in_registry<CoinType>(
+public fun process_payment_in_registry<T>(
+    registry: &mut PaymentRegistry,
     payment_id: String,
     payment_amount: u64,
-    coin: Coin<CoinType>,
+    coin: Coin<T>,
     receiver: address,
-    registry: &mut PaymentRegistry,
     _ctx: &mut TxContext,
 ): PaymentReceipt {
     let receipt = process_payment_with_receipt(
@@ -305,7 +244,7 @@ public fun process_payment_in_registry<CoinType>(
     if (option::is_some(&receipt_config_opt)) {
         let receipt_config_ref: &ReceiptConfig = option::borrow(&receipt_config_opt);
         if (receipt_config_ref.write_receipts) {
-            write_payment_receipt(receipt, registry);
+            write_payment_receipt(registry, receipt);
         }
     };
 
@@ -354,5 +293,58 @@ public fun close_expired_receipt(
                 key,
             );
         };
+    }
+}
+
+fun to_key(receipt: &PaymentReceipt): PaymentKey {
+    PaymentKey {
+        payment_id: receipt.payment_id,
+        payment_amount: receipt.payment_amount,
+        coin_type: receipt.coin_type,
+        receiver: receipt.receiver,
+    }
+}
+
+fun get_receipt_config(registry: &PaymentRegistry): Option<ReceiptConfig> {
+    let receipt_config_key = ReceiptConfigKey();
+    if (df::exists_(&registry.id, receipt_config_key)) {
+        let config: &ReceiptConfig = df::borrow(
+            &registry.id,
+            receipt_config_key,
+        );
+        option::some(*config)
+    } else {
+        option::none()
+    }
+}
+
+#[test_only]
+public fun init_for_testing(ctx: &mut TxContext) {
+    init(ctx);
+}
+
+#[test_only]
+public fun create_payment_key(
+    payment_id: String,
+    payment_amount: u64,
+    coin_type: String,
+    receiver: address,
+): PaymentKey {
+    PaymentKey {
+        payment_id,
+        payment_amount,
+        coin_type,
+        receiver,
+    }
+}
+
+#[test_only]
+public fun create_receipt_config(
+    write_receipts: bool,
+    receipt_expiration_duration_ms: Option<u64>,
+): ReceiptConfig {
+    ReceiptConfig {
+        write_receipts,
+        receipt_expiration_duration_ms,
     }
 }
