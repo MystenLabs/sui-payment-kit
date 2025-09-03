@@ -1,0 +1,12 @@
+[package]
+name = "sui_pay"
+edition = "2024"
+license = "" # TODO
+authors = [] # TODO
+
+[addresses]
+sui_pay = "0x0" # TODO
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "main" }
+
