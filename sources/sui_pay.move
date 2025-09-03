@@ -49,7 +49,6 @@ public struct ReceiptConfigKey() has copy, drop, store;
 
 /// ReceiptConfig control whether receipts are written to the registry, and if so, whether they expire.
 public struct ReceiptConfig has copy, drop, store {
-    write_receipts: bool,
     receipt_expiration_duration_ms: Option<u64>,
 }
 
@@ -209,14 +208,7 @@ public fun process_payment_in_registry<T>(
         _ctx,
     );
 
-    // If the registry has a receipt config with write_receipts set, write the receipt to the registry.
-    let receipt_config_opt = get_receipt_config(registry);
-    if (option::is_some(&receipt_config_opt)) {
-        let receipt_config_ref: &ReceiptConfig = option::borrow(&receipt_config_opt);
-        if (receipt_config_ref.write_receipts) {
-            write_payment_receipt(registry, receipt);
-        }
-    };
+    write_payment_receipt(registry, receipt);
 
     event::emit(
         receipt,
@@ -243,27 +235,29 @@ public fun close_expired_receipt(
 
     // If expiration duration is set, check if the receipt has expired
     // If expiration is disabled (None), receipts can never be closed immediately
-    let receipt_config_opt = get_receipt_config(registry);
-    if (option::is_some(&receipt_config_opt)) {
-        let receipt_config_ref = option::borrow(&receipt_config_opt);
-        let expiration_duration_opt = receipt_config_ref.receipt_expiration_duration_ms;
-        if (option::is_some(&expiration_duration_opt)) {
-            let payment_data: &PaymentReceipt = df::borrow(
-                &registry.id,
-                key,
-            );
-            let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
-            let expiration_duration = *option::borrow(&expiration_duration_opt);
-            let expiration_time = payment_data.timestamp_ms + expiration_duration;
+    let receipt_config_ref = registry.get_receipt_config();
+    let expiration_duration_opt = receipt_config_ref.receipt_expiration_duration_ms;
 
-            assert!(current_time >= expiration_time, EReceiptHasNotExpired);
+    // If expiration is not set, throw EReceiptHasNotExpired
+    if (!option::is_some(&expiration_duration_opt)) {
+        abort EReceiptHasNotExpired
+    };
 
-            df::remove<PaymentKey, PaymentReceipt>(
-                &mut registry.id,
-                key,
-            );
-        };
-    }
+    let payment_data: &PaymentReceipt = df::borrow(
+        &registry.id,
+        key,
+    );
+
+    let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
+    let expiration_duration = *option::borrow(&expiration_duration_opt);
+    let expiration_time = payment_data.timestamp_ms + expiration_duration;
+
+    assert!(current_time >= expiration_time, EReceiptHasNotExpired);
+
+    df::remove<PaymentKey, PaymentReceipt>(
+        &mut registry.id,
+        key,
+    );
 }
 
 fun to_key(receipt: &PaymentReceipt): PaymentKey {
@@ -275,17 +269,17 @@ fun to_key(receipt: &PaymentReceipt): PaymentKey {
     }
 }
 
-fun get_receipt_config(registry: &PaymentRegistry): Option<ReceiptConfig> {
+fun get_receipt_config(registry: &PaymentRegistry): ReceiptConfig {
     let receipt_config_key = ReceiptConfigKey();
-    if (df::exists_(&registry.id, receipt_config_key)) {
-        let config: &ReceiptConfig = df::borrow(
-            &registry.id,
-            receipt_config_key,
-        );
-        option::some(*config)
-    } else {
-        option::none()
-    }
+
+    assert!(df::exists_(&registry.id, receipt_config_key));
+
+    let receipt_config_ref = df::borrow<ReceiptConfigKey, ReceiptConfig>(
+        &registry.id,
+        receipt_config_key,
+    );
+
+    *receipt_config_ref
 }
 
 #[test_only]
@@ -309,12 +303,8 @@ public fun create_payment_key(
 }
 
 #[test_only]
-public fun create_receipt_config(
-    write_receipts: bool,
-    receipt_expiration_duration_ms: Option<u64>,
-): ReceiptConfig {
+public fun create_receipt_config(receipt_expiration_duration_ms: Option<u64>): ReceiptConfig {
     ReceiptConfig {
-        write_receipts,
         receipt_expiration_duration_ms,
     }
 }
