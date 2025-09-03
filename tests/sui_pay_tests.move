@@ -155,7 +155,7 @@ fun test_duplicate_payment_hash_failure() {
 
         // Set config to enable receipt writing
         let config = sui_pay::create_receipt_config(
-            option::none() // receipt_expiration_duration_ms
+            0 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -391,7 +391,7 @@ fun test_close_expired_receipt_success() {
 
         // Set config to enable receipt writing with 0ms expiration
         let config = sui_pay::create_receipt_config(
-            option::some(0) // receipt_expiration_duration_ms
+            0 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -458,7 +458,7 @@ fun test_close_nonexistent_receipt() {
 
         // Set config to enable receipt writing
         let config = sui_pay::create_receipt_config(
-            option::some(1000) // receipt_expiration_duration_ms
+            1000 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -511,7 +511,7 @@ fun test_close_receipt_not_expired() {
 
         // Set config to enable receipt writing with 10s expiration
         let config = sui_pay::create_receipt_config(
-            option::some(10000) // receipt_expiration_duration_ms
+            10000 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -557,9 +557,9 @@ fun test_close_receipt_not_expired() {
     test_scenario::end(scenario);
 }
 
-/// Tests that closing a receipt fails when expiration is disabled (None).
-#[test, expected_failure(abort_code = 3, location = sui_pay)]
-fun test_close_receipt_no_expiration() {
+/// Tests that closing a receipt succeeds when expiration duration is 0 (immediate expiration).
+#[test]
+fun test_close_receipt_immediate_expiration() {
     let mut scenario = setup_test_scenario();
 
     test_scenario::next_tx(&mut scenario, ALICE);
@@ -576,9 +576,9 @@ fun test_close_receipt_no_expiration() {
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing with no expiration
+        // Set config to enable receipt writing with immediate expiration
         let config = sui_pay::create_receipt_config(
-            option::none() // receipt_expiration_duration_ms
+            0 // receipt_expiration_duration_ms - 0 means immediate expiration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -646,7 +646,7 @@ fun test_30_day_expiration_duration() {
 
         // Set config to enable receipt writing with 30-day expiration
         let config = sui_pay::create_receipt_config(
-            option::some(thirty_days_ms) // receipt_expiration_duration_ms
+            thirty_days_ms // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -712,7 +712,7 @@ fun test_set_config_success() {
         );
 
         let config = sui_pay::create_receipt_config(
-            option::some(1000) // receipt_expiration_duration_ms
+            1000 // receipt_expiration_duration_ms
         );
 
         sui_pay::set_receipt_config(
@@ -761,7 +761,7 @@ fun test_set_config_unauthorized() {
             test_utils::destroy(alice_registry);
             
             let config = sui_pay::create_receipt_config(
-                option::some(1000) // receipt_expiration_duration_ms
+                1000 // receipt_expiration_duration_ms
             );
 
             // ALICE tries to set config on BOB's registry with her cap - should fail

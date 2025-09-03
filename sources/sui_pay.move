@@ -13,6 +13,7 @@ const EReceiptDoesNotExist: u64 = 2;
 const EReceiptHasNotExpired: u64 = 3;
 const EUnauthorizedAdmin: u64 = 4;
 const ERegistryAlreadyExists: u64 = 5;
+const EREceiptConfigDoesNotExist: u64 = 6;
 
 public struct Namespace has key {
     id: UID,
@@ -43,18 +44,22 @@ public struct PaymentKey has copy, drop, store {
     receiver: address,
 }
 
+public struct PaymentReceiptTimestamp has copy, drop, store {
+    timestamp_ms: u64,
+}
+
 /// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
 /// They are stored in a DynamicField within the registry, under their respective key structs.
 public struct ReceiptConfigKey() has copy, drop, store;
 
 /// ReceiptConfig control whether receipts are written to the registry, and if so, whether they expire.
 public struct ReceiptConfig has copy, drop, store {
-    receipt_expiration_duration_ms: Option<u64>,
+    receipt_expiration_duration_ms: u64,
 }
 
 /// Initializes the module, creating and sharing the Namespace object.
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Namespace { id: sui::object::new(ctx) });
+    transfer::share_object(Namespace { id: object::new(ctx) });
 }
 
 /// Creates a new payment registry
@@ -77,14 +82,14 @@ public fun create_registry(
     let uid = derived_object::claim(&mut namespace.id, name);
 
     let cap = RegistryAdminCap {
-        id: sui::object::new(ctx),
+        id: object::new(ctx),
         registry_id: uid.to_inner(),
     };
 
     (
         PaymentRegistry {
             id: uid,
-            cap_id: cap.id.to_inner(),
+            cap_id: object::id(&cap),
         },
         cap,
     )
@@ -119,10 +124,17 @@ public fun set_receipt_config(
 public fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
     let key = receipt.to_key();
     assert!(!df::exists_(&registry.id, key), EPaymentAlreadyExists);
+
+    // Store only the timestamp in the dynamic field to save space
+    // The timestamp is used for expiration checks
+    let payment_receipt_timestamp = PaymentReceiptTimestamp {
+        timestamp_ms: receipt.timestamp_ms,
+    };
+
     df::add(
         &mut registry.id,
         key,
-        receipt,
+        payment_receipt_timestamp,
     );
 }
 
@@ -233,26 +245,19 @@ public fun close_expired_receipt(
 ) {
     assert!(df::exists_(&registry.id, key), EReceiptDoesNotExist);
 
-    // If expiration duration is set, check if the receipt has expired
-    // If expiration is disabled (None), receipts can never be closed immediately
-    let receipt_config_ref = registry.get_receipt_config();
-    let expiration_duration_opt = receipt_config_ref.receipt_expiration_duration_ms;
-
-    // If expiration is not set, throw EReceiptHasNotExpired
-    assert!(option::is_some(&expiration_duration_opt), EReceiptHasNotExpired);
-
-    let payment_receipt: &PaymentReceipt = df::borrow(
+    let receipt_config_ref = get_receipt_config(registry);
+    let payment_receipt_timestamp: &PaymentReceiptTimestamp = df::borrow(
         &registry.id,
         key,
     );
 
     let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
-    let expiration_duration = *option::borrow(&expiration_duration_opt);
-    let expiration_time = payment_receipt.timestamp_ms + expiration_duration;
+    let expiration_time =
+        payment_receipt_timestamp.timestamp_ms + receipt_config_ref.receipt_expiration_duration_ms;
 
     assert!(current_time >= expiration_time, EReceiptHasNotExpired);
 
-    df::remove<PaymentKey, PaymentReceipt>(
+    df::remove<PaymentKey, PaymentReceiptTimestamp>(
         &mut registry.id,
         key,
     );
@@ -267,17 +272,15 @@ fun to_key(receipt: &PaymentReceipt): PaymentKey {
     }
 }
 
-fun get_receipt_config(registry: &PaymentRegistry): ReceiptConfig {
+fun get_receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
     let receipt_config_key = ReceiptConfigKey();
 
-    assert!(df::exists_(&registry.id, receipt_config_key));
+    assert!(df::exists_(&registry.id, receipt_config_key), EREceiptConfigDoesNotExist);
 
-    let receipt_config_ref = df::borrow<ReceiptConfigKey, ReceiptConfig>(
+    df::borrow<ReceiptConfigKey, ReceiptConfig>(
         &registry.id,
         receipt_config_key,
-    );
-
-    *receipt_config_ref
+    )
 }
 
 #[test_only]
@@ -301,7 +304,7 @@ public fun create_payment_key(
 }
 
 #[test_only]
-public fun create_receipt_config(receipt_expiration_duration_ms: Option<u64>): ReceiptConfig {
+public fun create_receipt_config(receipt_expiration_duration_ms: u64): ReceiptConfig {
     ReceiptConfig {
         receipt_expiration_duration_ms,
     }
