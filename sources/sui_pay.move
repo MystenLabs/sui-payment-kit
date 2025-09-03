@@ -7,7 +7,7 @@ use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
 
-const EReceiptAlreadyExists: u64 = 0;
+const EPaymentAlreadyExists: u64 = 0;
 const EIncorrectAmount: u64 = 1;
 const EReceiptDoesNotExist: u64 = 2;
 const EReceiptHasNotExpired: u64 = 3;
@@ -98,21 +98,15 @@ public fun set_receipt_config(
     _ctx: &mut TxContext,
 ) {
     assert!(registry.cap_id == object::id(cap), EUnauthorizedAdmin);
+
     let key = ReceiptConfigKey();
 
-    if (!df::exists_(&registry.id, key)) {
-        df::add(
-            &mut registry.id,
-            key,
-            receipt_config,
-        );
-        return
-    };
-
-    let receipt: &mut ReceiptConfig = df::borrow_mut(&mut registry.id, key);
-
-    receipt.write_receipts = receipt_config.write_receipts;
-    receipt.receipt_expiration_duration_ms = receipt_config.receipt_expiration_duration_ms;
+    df::remove_if_exists<ReceiptConfigKey, ReceiptConfig>(&mut registry.id, key);
+    df::add(
+        &mut registry.id,
+        key,
+        receipt_config,
+    );
 }
 
 /// Writes a payment receipt to a dynamic field in the registry.
@@ -125,55 +119,12 @@ public fun set_receipt_config(
 /// * If a receipt with the same payment parameters already exists in the registry
 public fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
     let key = receipt.to_key();
-    assert!(!df::exists_(&registry.id, key), EReceiptAlreadyExists);
+    assert!(!df::exists_(&registry.id, key), EPaymentAlreadyExists);
     df::add(
         &mut registry.id,
         key,
         receipt,
     );
-}
-
-/// Processes a payment (without the use of a Registry), emitting a payment receipt event.
-///
-/// # Parameters
-/// * `payment_id` - Unique payment_id for the payment
-/// * `payment_amount` - Expected payment amount
-/// * `coin` - Coin to be transferred
-/// * `receiver` - Address of the payment receiver
-///
-/// # Aborts
-/// * If the coin amount does not match the expected payment amount
-/// * If a receipt with the same payment parameters already exists in the registry
-///
-/// # Returns
-/// The payment receipt
-public fun process_payment_with_receipt<T>(
-    payment_id: String,
-    payment_amount: u64,
-    coin: Coin<T>,
-    receiver: address,
-    _ctx: &mut TxContext,
-): PaymentReceipt {
-    let coin_type = type_name::into_string(
-        type_name::with_defining_ids<T>(),
-    );
-
-    // If the coin amount does not match the expected payment amount, abort.
-    // This ensures that the caller cannot accidentally overpay or underpay.
-    let actual_amount = coin::value(&coin);
-    assert!(actual_amount == payment_amount, EIncorrectAmount);
-
-    let timestamp_ms = sui::tx_context::epoch_timestamp_ms(_ctx);
-
-    transfer::public_transfer(coin, receiver);
-
-    PaymentReceipt {
-        payment_id,
-        payment_amount,
-        receiver,
-        coin_type,
-        timestamp_ms,
-    }
 }
 
 /// Processes a payment (without the use of a Registry), emitting a payment receipt event.
@@ -196,16 +147,35 @@ public fun process_payment<T>(
     coin: Coin<T>,
     receiver: address,
     _ctx: &mut TxContext,
-) {
-    event::emit(
-        process_payment_with_receipt(
-            payment_id,
-            payment_amount,
-            coin,
-            receiver,
-            _ctx,
-        ),
+): PaymentReceipt {
+    let coin_type = type_name::into_string(
+        type_name::with_defining_ids<T>(),
     );
+
+    // If the coin amount does not match the expected payment amount, abort.
+    // This ensures that the caller cannot accidentally overpay or underpay.
+    let actual_amount = coin::value(&coin);
+    assert!(actual_amount == payment_amount, EIncorrectAmount);
+
+    let timestamp_ms = sui::tx_context::epoch_timestamp_ms(_ctx);
+
+    transfer::public_transfer(coin, receiver);
+
+    event::emit(PaymentReceipt {
+        payment_id,
+        payment_amount,
+        receiver,
+        coin_type,
+        timestamp_ms,
+    });
+
+    PaymentReceipt {
+        payment_id,
+        payment_amount,
+        receiver,
+        coin_type,
+        timestamp_ms,
+    }
 }
 
 /// Processes a payment via a payment registry, writing a receipt to the registry.
@@ -231,7 +201,7 @@ public fun process_payment_in_registry<T>(
     receiver: address,
     _ctx: &mut TxContext,
 ): PaymentReceipt {
-    let receipt = process_payment_with_receipt(
+    let receipt = process_payment(
         payment_id,
         payment_amount,
         coin,
