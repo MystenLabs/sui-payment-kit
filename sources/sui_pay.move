@@ -113,31 +113,6 @@ public fun set_receipt_config(
     );
 }
 
-/// Writes a payment receipt to a dynamic field in the registry.
-///
-/// # Parameters
-/// * `receipt`  - Receipt to write
-/// * `registry` - Payment registry to write the receipt to
-///
-/// # Aborts
-/// * If a receipt with the same payment parameters already exists in the registry
-public fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
-    let key = receipt.to_key();
-    assert!(!df::exists_(&registry.id, key), EPaymentAlreadyExists);
-
-    // Store only the timestamp in the dynamic field to save space
-    // The timestamp is used for expiration checks
-    let payment_receipt_timestamp = PaymentReceiptTimestamp {
-        timestamp_ms: receipt.timestamp_ms,
-    };
-
-    df::add(
-        &mut registry.id,
-        key,
-        payment_receipt_timestamp,
-    );
-}
-
 /// Processes a payment (without the use of a Registry), emitting a payment receipt event.
 ///
 /// # Parameters
@@ -260,6 +235,31 @@ public fun close_expired_receipt(
     df::remove<PaymentKey, PaymentReceiptTimestamp>(
         &mut registry.id,
         key,
+    );
+}
+
+/// Writes a payment receipt to a dynamic field in the registry.
+///
+/// # Parameters
+/// * `receipt`  - Receipt to write
+/// * `registry` - Payment registry to write the receipt to
+///
+/// # Aborts
+/// * If a receipt with the same payment parameters already exists in the registry
+fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
+    let key = receipt.to_key();
+    assert!(!df::exists_(&registry.id, key), EPaymentAlreadyExists);
+
+    // Store only the timestamp in the dynamic field to save space
+    // The timestamp is used for expiration checks
+    let payment_receipt_timestamp = PaymentReceiptTimestamp {
+        timestamp_ms: receipt.timestamp_ms,
+    };
+
+    df::add(
+        &mut registry.id,
+        key,
+        payment_receipt_timestamp,
     );
 }
 
