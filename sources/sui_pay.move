@@ -2,6 +2,7 @@ module sui_pay::sui_pay;
 
 use std::ascii::String;
 use std::type_name;
+use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::derived_object;
 use sui::dynamic_field as df;
@@ -132,6 +133,7 @@ public fun process_payment<T>(
     payment_amount: u64,
     coin: Coin<T>,
     receiver: address,
+    clock: &Clock,
     _ctx: &mut TxContext,
 ): PaymentReceipt {
     let coin_type = type_name::into_string(
@@ -143,8 +145,7 @@ public fun process_payment<T>(
     let actual_amount = coin::value(&coin);
     assert!(actual_amount == payment_amount, EIncorrectAmount);
 
-    let timestamp_ms = sui::tx_context::epoch_timestamp_ms(_ctx);
-
+    let timestamp_ms = clock::timestamp_ms(clock);
     transfer::public_transfer(coin, receiver);
 
     event::emit(PaymentReceipt {
@@ -185,6 +186,7 @@ public fun process_payment_in_registry<T>(
     payment_amount: u64,
     coin: Coin<T>,
     receiver: address,
+    clock: &Clock,
     _ctx: &mut TxContext,
 ): PaymentReceipt {
     let receipt = process_payment(
@@ -192,6 +194,7 @@ public fun process_payment_in_registry<T>(
         payment_amount,
         coin,
         receiver,
+        clock,
         _ctx,
     );
 

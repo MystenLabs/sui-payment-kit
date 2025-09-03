@@ -2,6 +2,7 @@
 module sui_pay::sui_pay_tests;
 
 use std::type_name;
+use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::sui::SUI;
 use sui::test_scenario::{Self, Scenario};
@@ -30,6 +31,17 @@ fun setup_test_scenario(): Scenario {
 /// A Coin<SUI> with the specified amount
 fun create_test_coin(scenario: &mut Scenario, amount: u64): Coin<SUI> {
     coin::mint_for_testing<SUI>(amount, test_scenario::ctx(scenario))
+}
+
+/// Creates a test clock for testing time-dependent functionality.
+///
+/// # Parameters
+/// * `scenario` - Test scenario to use for clock creation
+///
+/// # Returns
+/// A Clock instance for testing
+fun create_test_clock(scenario: &mut Scenario): Clock {
+    clock::create_for_testing(test_scenario::ctx(scenario))
 }
 
 /// Tests creating a payment registry with no expiration duration.
@@ -77,6 +89,7 @@ fun test_successful_payment_exact_amount() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -84,11 +97,12 @@ fun test_successful_payment_exact_amount() {
             1000, // payment_amount
             coin,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
         // Payment completed successfully - nonce is now recorded
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -116,6 +130,7 @@ fun test_overpayment_failure() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1500); // More than expected
+        let clock = create_test_clock(&mut scenario);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -123,9 +138,10 @@ fun test_overpayment_failure() {
             1000, // payment_amount - less than coin value
             coin,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -165,6 +181,7 @@ fun test_duplicate_payment_hash_failure() {
         );
         let coin1 = create_test_coin(&mut scenario, 1000);
         let coin2 = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         // First payment with specific parameters should succeed
         let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
@@ -173,6 +190,7 @@ fun test_duplicate_payment_hash_failure() {
             1000, // payment_amount
             coin1,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -183,9 +201,10 @@ fun test_duplicate_payment_hash_failure() {
             1000, // Same payment_amount
             coin2,
             BOB, // Same receiver
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -213,6 +232,7 @@ fun test_insufficient_amount_failure() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 500); // Less than expected
+        let clock = create_test_clock(&mut scenario);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -220,9 +240,10 @@ fun test_insufficient_amount_failure() {
             1000, // Expected 1000 but coin only has 500
             coin,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -251,6 +272,8 @@ fun test_multiple_different_nonces() {
         );
 
         // Process multiple payments with different salts
+        let clock = create_test_clock(&mut scenario);
+        
         let coin1 = create_test_coin(&mut scenario, 1000);
         let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -258,6 +281,7 @@ fun test_multiple_different_nonces() {
             1000,
             coin1,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -268,6 +292,7 @@ fun test_multiple_different_nonces() {
             1500,
             coin2,
             CHARLIE,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -278,11 +303,12 @@ fun test_multiple_different_nonces() {
             500,
             coin3,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
         // All payments completed successfully with different nonces
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -310,6 +336,7 @@ fun test_zero_payment_amount() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -317,11 +344,13 @@ fun test_zero_payment_amount() {
             1000, // payment amount
             coin,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
         // Payment with zero payment amount completed successfully
 
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -351,17 +380,20 @@ fun test_large_nonce_values() {
 
         // Test with large salt value
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
+        
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
             std::ascii::string(b"18446744073709551615"), // Large salt
             1000,
             coin,
             BOB,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
         // Payment with large nonce completed successfully
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -400,6 +432,7 @@ fun test_close_expired_receipt_success() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let payment_id = std::ascii::string(b"12345");
         let payment_amount = 1000;
@@ -411,6 +444,7 @@ fun test_close_expired_receipt_success() {
             payment_amount,
             coin,
             receiver,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -428,7 +462,7 @@ fun test_close_expired_receipt_success() {
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -520,6 +554,7 @@ fun test_close_receipt_not_expired() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let payment_id = std::ascii::string(b"12345");
         let payment_amount = 1000;
@@ -531,6 +566,7 @@ fun test_close_receipt_not_expired() {
             payment_amount,
             coin,
             receiver,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -548,7 +584,7 @@ fun test_close_receipt_not_expired() {
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -587,6 +623,7 @@ fun test_close_receipt_immediate_expiration() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let payment_id = std::ascii::string(b"12345");
         let payment_amount = 1000;
@@ -598,6 +635,7 @@ fun test_close_receipt_immediate_expiration() {
             payment_amount,
             coin,
             receiver,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -615,7 +653,7 @@ fun test_close_receipt_immediate_expiration() {
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -655,6 +693,7 @@ fun test_30_day_expiration_duration() {
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
 
         let payment_id = std::ascii::string(b"12345");
         let payment_amount = 1000;
@@ -666,6 +705,7 @@ fun test_30_day_expiration_duration() {
             payment_amount,
             coin,
             receiver,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -683,7 +723,7 @@ fun test_30_day_expiration_duration() {
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
-
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
