@@ -152,7 +152,7 @@ public fun process_payment_with_receipt<T>(
     payment_amount: u64,
     coin: Coin<T>,
     receiver: address,
-    _ctx: &mut sui::tx_context::TxContext,
+    _ctx: &mut TxContext,
 ): PaymentReceipt {
     let coin_type = type_name::into_string(
         type_name::with_defining_ids<T>(),
