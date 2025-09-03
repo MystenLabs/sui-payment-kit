@@ -239,18 +239,16 @@ public fun close_expired_receipt(
     let expiration_duration_opt = receipt_config_ref.receipt_expiration_duration_ms;
 
     // If expiration is not set, throw EReceiptHasNotExpired
-    if (!option::is_some(&expiration_duration_opt)) {
-        abort EReceiptHasNotExpired
-    };
+    assert!(option::is_some(&expiration_duration_opt), EReceiptHasNotExpired);
 
-    let payment_data: &PaymentReceipt = df::borrow(
+    let payment_receipt: &PaymentReceipt = df::borrow(
         &registry.id,
         key,
     );
 
     let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
     let expiration_duration = *option::borrow(&expiration_duration_opt);
-    let expiration_time = payment_data.timestamp_ms + expiration_duration;
+    let expiration_time = payment_receipt.timestamp_ms + expiration_duration;
 
     assert!(current_time >= expiration_time, EReceiptHasNotExpired);
 
