@@ -170,7 +170,7 @@ fun test_duplicate_payment_hash_failure() {
 
         // Set config to enable payment record writing
         let config = sui_pay::create_payment_record_config(
-            0 // epoch_expiration_duration
+            0, // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -272,7 +272,7 @@ fun test_multiple_different_nonces() {
 
         // Process multiple payments with different salts
         let clock = create_test_clock(&mut scenario);
-        
+
         let coin1 = create_test_coin(&mut scenario, 1000);
         let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
@@ -380,7 +380,7 @@ fun test_large_nonce_values() {
         // Test with large salt value
         let coin = create_test_coin(&mut scenario, 1000);
         let clock = create_test_clock(&mut scenario);
-        
+
         let _receipt = sui_pay::process_payment_in_registry<SUI>(
             &mut registry,
             std::ascii::string(b"18446744073709551615"), // Large salt
@@ -422,7 +422,7 @@ fun test_delete_expired_payment_record_success() {
 
         // Set config to enable payment record writing with 0 epoch expiration
         let config = sui_pay::create_payment_record_config(
-            0 // epoch_expiration_duration
+            0, // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -448,7 +448,7 @@ fun test_delete_expired_payment_record_success() {
         );
 
         // Create payment record key to delete the record
-        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
+        let payment_record_key = sui_pay::create_payment_key<SUI>(
             payment_id,
             payment_amount,
             receiver,
@@ -489,7 +489,7 @@ fun test_delete_nonexistent_payment_record() {
 
         // Set config to enable payment record writing
         let config = sui_pay::create_payment_record_config(
-            1000 // epoch_expiration_duration
+            1000, // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -501,7 +501,7 @@ fun test_delete_nonexistent_payment_record() {
         let clock = create_test_clock(&mut scenario);
 
         // Create a fake payment record key for a non-existent record
-        let fake_payment_record_key = sui_pay::create_payment_record_key<SUI>(
+        let fake_payment_record_key = sui_pay::create_payment_key<SUI>(
             std::ascii::string(b"99999"),
             1000,
             BOB,
@@ -543,7 +543,7 @@ fun test_delete_payment_record_not_expired() {
 
         // Set config to enable payment record writing with large epoch expiration
         let config = sui_pay::create_payment_record_config(
-            10000 // epoch_expiration_duration
+            10000, // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -569,7 +569,7 @@ fun test_delete_payment_record_not_expired() {
         );
 
         // Create payment record key to delete the record
-        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
+        let payment_record_key = sui_pay::create_payment_key<SUI>(
             payment_id,
             payment_amount,
             receiver,
@@ -610,7 +610,7 @@ fun test_delete_payment_record_immediate_expiration() {
 
         // Set config to enable payment record writing with immediate expiration
         let config = sui_pay::create_payment_record_config(
-            0 // epoch_expiration_duration - 0 means immediate expiration
+            0, // epoch_expiration_duration - 0 means immediate expiration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -636,7 +636,7 @@ fun test_delete_payment_record_immediate_expiration() {
         );
 
         // Create payment record key to delete the record
-        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
+        let payment_record_key = sui_pay::create_payment_key<SUI>(
             payment_id,
             payment_amount,
             receiver,
@@ -677,7 +677,7 @@ fun test_30_epoch_expiration_duration() {
 
         // Set config to enable payment record writing with 30 epoch expiration
         let config = sui_pay::create_payment_record_config(
-            30 // epoch_expiration_duration (30 epochs)
+            30, // epoch_expiration_duration (30 epochs)
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -703,7 +703,7 @@ fun test_30_epoch_expiration_duration() {
         );
 
         // Create payment record key to delete the record
-        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
+        let payment_record_key = sui_pay::create_payment_key<SUI>(
             payment_id,
             payment_amount,
             receiver,
@@ -736,7 +736,7 @@ fun test_valid_registry_names() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Test various valid SuiNS-compliant names
         let (registry1, cap1) = sui_pay::create_registry(
             &mut namespace,
@@ -745,7 +745,7 @@ fun test_valid_registry_names() {
         );
         test_utils::destroy(registry1);
         test_utils::destroy(cap1);
-        
+
         let (registry2, cap2) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"abc"),
@@ -753,23 +753,15 @@ fun test_valid_registry_names() {
         );
         test_utils::destroy(registry2);
         test_utils::destroy(cap2);
-        
+
         let (registry3, cap3) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"Test-Registry-123"),
+            std::ascii::string(b"test-registry-123"),
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(registry3);
         test_utils::destroy(cap3);
-        
-        let (registry4, cap4) = sui_pay::create_registry(
-            &mut namespace,
-            std::ascii::string(b"UPPERCASE123"),
-            test_scenario::ctx(&mut scenario),
-        );
-        test_utils::destroy(registry4);
-        test_utils::destroy(cap4);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -789,7 +781,7 @@ fun test_invalid_registry_name_special_chars() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Should fail - contains underscore (not allowed in SuiNS)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
@@ -798,7 +790,7 @@ fun test_invalid_registry_name_special_chars() {
         );
         test_utils::destroy(registry);
         test_utils::destroy(cap);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -818,7 +810,7 @@ fun test_invalid_registry_name_too_long() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Should fail - 64 characters (exceeds 63 character SuiNS limit)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
@@ -827,7 +819,7 @@ fun test_invalid_registry_name_too_long() {
         );
         test_utils::destroy(registry);
         test_utils::destroy(cap);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -847,7 +839,7 @@ fun test_invalid_registry_name_empty() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Should fail - too short (less than 3 characters)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
@@ -856,7 +848,7 @@ fun test_invalid_registry_name_empty() {
         );
         test_utils::destroy(registry);
         test_utils::destroy(cap);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -883,7 +875,7 @@ fun test_set_config_success() {
         );
 
         let config = sui_pay::create_payment_record_config(
-            1000 // epoch_expiration_duration
+            1000, // epoch_expiration_duration
         );
 
         sui_pay::set_receipt_config(
@@ -930,9 +922,9 @@ fun test_set_config_unauthorized() {
                 test_scenario::ctx(&mut scenario),
             );
             test_utils::destroy(alice_registry);
-            
+
             let config = sui_pay::create_payment_record_config(
-                1000 // epoch_expiration_duration
+                1000, // epoch_expiration_duration
             );
 
             // ALICE tries to set config on BOB's registry with her cap - should fail
@@ -942,7 +934,7 @@ fun test_set_config_unauthorized() {
                 config,
                 test_scenario::ctx(&mut scenario),
             );
-            
+
             test_utils::destroy(alice_cap);
             test_scenario::return_shared(namespace);
         };
@@ -967,7 +959,7 @@ fun test_invalid_registry_name_starts_with_hyphen() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Should fail - starts with hyphen
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
@@ -976,7 +968,7 @@ fun test_invalid_registry_name_starts_with_hyphen() {
         );
         test_utils::destroy(registry);
         test_utils::destroy(cap);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -996,7 +988,7 @@ fun test_invalid_registry_name_ends_with_hyphen() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Should fail - ends with hyphen
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
@@ -1005,7 +997,7 @@ fun test_invalid_registry_name_ends_with_hyphen() {
         );
         test_utils::destroy(registry);
         test_utils::destroy(cap);
-        
+
         test_scenario::return_shared(namespace);
     };
 
@@ -1025,7 +1017,7 @@ fun test_valid_registry_name_with_hyphens() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        
+
         // Valid names with hyphens in the middle
         let (registry1, cap1) = sui_pay::create_registry(
             &mut namespace,
@@ -1034,7 +1026,7 @@ fun test_valid_registry_name_with_hyphens() {
         );
         test_utils::destroy(registry1);
         test_utils::destroy(cap1);
-        
+
         let (registry2, cap2) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test-payment-system"),
@@ -1042,8 +1034,220 @@ fun test_valid_registry_name_with_hyphens() {
         );
         test_utils::destroy(registry2);
         test_utils::destroy(cap2);
-        
+
         test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with uppercase letters fails.
+#[test, expected_failure(abort_code = 7, location = sui_pay)]
+fun test_invalid_registry_name_uppercase() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+
+        // Should fail - contains uppercase letters
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"MyRegistry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that empty nonce fails with EInvalidNonce error.
+#[test, expected_failure(abort_code = 8, location = sui_pay)]
+fun test_empty_nonce_failure() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        let (mut registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"testregistry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
+
+        let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
+            std::ascii::string(b""), // Empty nonce - should fail
+            1000,
+            coin,
+            BOB,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_utils::destroy(clock);
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that nonce longer than 36 characters fails with EInvalidNonce error.
+#[test, expected_failure(abort_code = 8, location = sui_pay)]
+fun test_nonce_too_long_failure() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        let (mut registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"testregistry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
+
+        let _receipt = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
+            std::ascii::string(b"1234567890123456789012345678901234567"), // 37 characters - should fail
+            1000,
+            coin,
+            BOB,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_utils::destroy(clock);
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that valid nonce lengths (1 and 36 characters) work correctly.
+#[test]
+fun test_valid_nonce_lengths() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        let (mut registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"testregistry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        let clock = create_test_clock(&mut scenario);
+
+        // Test minimum length (1 character)
+        let coin1 = create_test_coin(&mut scenario, 1000);
+        let _receipt1 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
+            std::ascii::string(b"1"), // 1 character - should work
+            1000,
+            coin1,
+            BOB,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        // Test maximum length (36 characters)
+        let coin2 = create_test_coin(&mut scenario, 500);
+        let _receipt2 = sui_pay::process_payment_in_registry<SUI>(
+            &mut registry,
+            std::ascii::string(b"123456789012345678901234567890123456"), // 36 characters - should work
+            500,
+            coin2,
+            CHARLIE,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_utils::destroy(clock);
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests the standalone process_payment function without registry.
+#[test]
+fun test_process_payment_standalone() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let coin = create_test_coin(&mut scenario, 1500);
+        let clock = create_test_clock(&mut scenario);
+
+        let _receipt = sui_pay::process_payment<SUI>(
+            std::ascii::string(b"standalone-payment"),
+            1500,
+            coin,
+            BOB,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_utils::destroy(clock);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests the standalone process_payment function with invalid nonce.
+#[test, expected_failure(abort_code = 8, location = sui_pay)]
+fun test_process_payment_standalone_invalid_nonce() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let coin = create_test_coin(&mut scenario, 1000);
+        let clock = create_test_clock(&mut scenario);
+
+        let _receipt = sui_pay::process_payment<SUI>(
+            std::ascii::string(b""), // Empty nonce - should fail
+            1000,
+            coin,
+            BOB,
+            &clock,
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_utils::destroy(clock);
     };
 
     test_scenario::end(scenario);
