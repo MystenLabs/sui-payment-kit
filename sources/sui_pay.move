@@ -96,9 +96,18 @@ public fun create_registry(
     )
 }
 
+/// Creates a new Receipt Config
+///
+/// # Parameters
+/// * `registry` - The PaymentRegistry to configure
+/// * `cap` - The RegistryAdminCap proving permission to configure the registry and where the config will be stored
+/// * `receipt_config` - The ReceiptConfig to set
+///
+/// # Returns
+/// A new PaymentRegistry instance
 public fun set_receipt_config(
-    registry: &mut PaymentRegistry,
-    cap: &RegistryAdminCap,
+    registry: &PaymentRegistry,
+    cap: &mut RegistryAdminCap,
     receipt_config: ReceiptConfig,
     _ctx: &mut TxContext,
 ) {
@@ -106,9 +115,9 @@ public fun set_receipt_config(
 
     let key = ReceiptConfigKey();
 
-    df::remove_if_exists<ReceiptConfigKey, ReceiptConfig>(&mut registry.id, key);
+    df::remove_if_exists<ReceiptConfigKey, ReceiptConfig>(&mut cap.id, key);
     df::add(
-        &mut registry.id,
+        &mut cap.id,
         key,
         receipt_config,
     );
@@ -211,22 +220,24 @@ public fun process_payment_in_registry<T>(
 ///
 /// # Parameters
 /// * `registry` - Payment registry containing the receipt
-/// * `payment_hash` - Hash of payment parameters identifying the receipt to close
+/// * `cap` - The RegistryAdminCap proving permission to verify the Receipt Config
+/// * `payment_key` - PaymentKey identifying the receipt to remove
 ///
 /// # Aborts
 /// * If receipt with payment hash does not exist
 /// * If receipt has not yet expired (when expiration is enabled)
 public fun close_expired_receipt(
     registry: &mut PaymentRegistry,
-    key: PaymentKey,
+    cap: &RegistryAdminCap,
+    payment_key: PaymentKey,
     ctx: &mut TxContext,
 ) {
-    assert!(df::exists_(&registry.id, key), EReceiptDoesNotExist);
+    assert!(df::exists_(&registry.id, payment_key), EReceiptDoesNotExist);
 
-    let receipt_config_ref = get_receipt_config(registry);
+    let receipt_config_ref = get_receipt_config(cap);
     let payment_receipt_timestamp: &PaymentReceiptTimestamp = df::borrow(
         &registry.id,
-        key,
+        payment_key,
     );
 
     let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
@@ -237,7 +248,7 @@ public fun close_expired_receipt(
 
     df::remove<PaymentKey, PaymentReceiptTimestamp>(
         &mut registry.id,
-        key,
+        payment_key,
     );
 }
 
@@ -275,13 +286,13 @@ fun to_key(receipt: &PaymentReceipt): PaymentKey {
     }
 }
 
-fun get_receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
+fun get_receipt_config(cap: &RegistryAdminCap): &ReceiptConfig {
     let receipt_config_key = ReceiptConfigKey();
 
-    assert!(df::exists_(&registry.id, receipt_config_key), EREceiptConfigDoesNotExist);
+    assert!(df::exists_(&cap.id, receipt_config_key), EREceiptConfigDoesNotExist);
 
     df::borrow<ReceiptConfigKey, ReceiptConfig>(
-        &registry.id,
+        &cap.id,
         receipt_config_key,
     )
 }
