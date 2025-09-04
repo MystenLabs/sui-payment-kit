@@ -94,14 +94,17 @@ Sui Payment Standard is a Move smart contract that enables secure, verifiable pa
 
 ### Error Codes
 
-| Code | Constant                 | Description                              |
-| ---- | ------------------------ | ---------------------------------------- |
-| 0    | `EReceiptAlreadyExists`  | Duplicate payment attempt                |
-| 1    | `EIncorrectAmount`       | Coin value doesn't match expected amount |
-| 2    | `EReceiptDoesNotExist`   | Receipt not found for cleanup            |
-| 3    | `EReceiptHasNotExpired`  | Attempting to close non-expired receipt  |
-| 4    | `EUnauthorizedAdmin`     | Invalid admin capability                 |
-| 5    | `ERegistryAlreadyExists` | Registry name collision                  |
+| Code | Constant                                 | Description                               |
+| ---- | ---------------------------------------- | ----------------------------------------- |
+| 0    | `EPaymentAlreadyExists`                  | Duplicate payment attempt                 |
+| 1    | `EIncorrectAmount`                       | Coin value doesn't match expected amount  |
+| 2    | `EPaymentRecordDoesNotExist`             | Receipt not found for cleanup             |
+| 3    | `EPaymentRecordHasNotExpired`            | Attempting to close non-expired receipt   |
+| 4    | `EUnauthorizedAdmin`                     | Invalid admin capability                  |
+| 5    | `ERegistryAlreadyExists`                 | Registry name collision                   |
+| 6    | `ERegistryNameLengthIsNotAllowed`        | Registry name is too long                 |
+| 7    | `ERegistryNameContainsInvalidCharacters` | Registry name contains invalid characters |
+| 8    | `EInvalidNonce`                          | Invalid nonce was provided                |
 
 ## Usage
 
