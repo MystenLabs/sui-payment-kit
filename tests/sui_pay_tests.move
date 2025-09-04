@@ -737,7 +737,7 @@ fun test_valid_registry_names() {
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         
-        // Test various valid alphanumeric names
+        // Test various valid SuiNS-compliant names
         let (registry1, cap1) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test123"),
@@ -756,11 +756,19 @@ fun test_valid_registry_names() {
         
         let (registry3, cap3) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"registry123abc"),
+            std::ascii::string(b"Test-Registry-123"),
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(registry3);
         test_utils::destroy(cap3);
+        
+        let (registry4, cap4) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"UPPERCASE123"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry4);
+        test_utils::destroy(cap4);
         
         test_scenario::return_shared(namespace);
     };
@@ -782,7 +790,7 @@ fun test_invalid_registry_name_special_chars() {
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         
-        // Should fail - contains underscore
+        // Should fail - contains underscore (not allowed in SuiNS)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
@@ -811,10 +819,10 @@ fun test_invalid_registry_name_too_long() {
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         
-        // Should fail - 33 characters (exceeds 32 character limit)
+        // Should fail - 64 characters (exceeds 63 character SuiNS limit)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"123456789012345678901234567890123"),
+            std::ascii::string(b"1234567890123456789012345678901234567890123456789012345678901234"),
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(registry);
@@ -840,10 +848,10 @@ fun test_invalid_registry_name_empty() {
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         
-        // Should fail - empty name
+        // Should fail - too short (less than 3 characters)
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b""),
+            std::ascii::string(b"ab"),
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(registry);
@@ -941,6 +949,101 @@ fun test_set_config_unauthorized() {
 
         test_utils::destroy(registry);
         test_utils::destroy(bob_cap);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with names starting with hyphen fails.
+#[test, expected_failure(abort_code = 7, location = sui_pay)]
+fun test_invalid_registry_name_starts_with_hyphen() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Should fail - starts with hyphen
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"-testregistry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with names ending with hyphen fails.
+#[test, expected_failure(abort_code = 7, location = sui_pay)]
+fun test_invalid_registry_name_ends_with_hyphen() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Should fail - ends with hyphen
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"testregistry-"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests creating registry with valid hyphenated names.
+#[test]
+fun test_valid_registry_name_with_hyphens() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Valid names with hyphens in the middle
+        let (registry1, cap1) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"my-registry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry1);
+        test_utils::destroy(cap1);
+        
+        let (registry2, cap2) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"test-payment-system"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry2);
+        test_utils::destroy(cap2);
+        
+        test_scenario::return_shared(namespace);
     };
 
     test_scenario::end(scenario);

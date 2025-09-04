@@ -319,13 +319,27 @@ fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
 }
 
 fun validate_registry_name(name: String) {
-    assert!(name.length() > 0 && name.length() <= 32, ERegistryNameLengthIsNotAllowed);
+    assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
 
-    // Ensure name contains only lowercase letters and numbers (no special characters or spaces)
-    assert!(
-        name.as_bytes().all!(|c| (*c >= 97 && *c <= 122) || (*c >= 48 && *c <= 57)),
-        ERegistryNameContainsInvalidCharacters,
-    );
+    let bytes = name.as_bytes();
+    let len = bytes.length();
+
+    // Check each character follows SuiNS standards (letters, digits, hyphens)
+    let mut i = 0;
+    while (i < len) {
+        let c = *bytes.borrow(i);
+        assert!(
+            (c >= 97 && c <= 122) || // lowercase a-z
+            (c >= 48 && c <= 57) ||  // digits 0-9
+            (c == 45), // hyphen -
+            ERegistryNameContainsInvalidCharacters,
+        );
+        i = i + 1;
+    };
+
+    // Names cannot start or end with hyphen
+    assert!(*bytes.borrow(0) != 45, ERegistryNameContainsInvalidCharacters);
+    assert!(*bytes.borrow(len - 1) != 45, ERegistryNameContainsInvalidCharacters);
 }
 
 fun validate_nonce(nonce: &String) {
