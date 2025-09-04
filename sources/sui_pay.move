@@ -204,10 +204,6 @@ public fun process_payment_in_registry<T: drop>(
 
     registry.write_payment_record<T>(receipt, ctx);
 
-    event::emit(
-        receipt,
-    );
-
     receipt
 }
 
@@ -215,21 +211,21 @@ public fun process_payment_in_registry<T: drop>(
 ///
 /// # Parameters
 /// * `registry` - Payment registry containing the receipt
-/// * `payment_record_key` - Hash of payment parameters used as the key for the PaymentRecord
+/// * `payment_key` - Hash of payment parameters used as the key for the PaymentRecord
 ///
 /// # Aborts
 /// * If receipt with payment hash does not exist
 /// * If receipt has not yet expired (when expiration is enabled)
 public fun delete_payment_record<T: drop>(
     registry: &mut PaymentRegistry,
-    payment_record_key: PaymentKey<T>,
+    payment_key: PaymentKey<T>,
     ctx: &mut TxContext,
 ) {
-    assert!(df::exists_(&registry.id, payment_record_key), EPaymentRecordDoesNotExist);
+    assert!(df::exists_(&registry.id, payment_key), EPaymentRecordDoesNotExist);
 
     let payment_record: &PaymentRecord = df::borrow(
         &registry.id,
-        payment_record_key,
+        payment_key,
     );
 
     let current_epoch = ctx.epoch();
@@ -240,17 +236,17 @@ public fun delete_payment_record<T: drop>(
 
     df::remove<PaymentKey<T>, PaymentRecord>(
         &mut registry.id,
-        payment_record_key,
+        payment_key,
     );
 }
 
-/// Creates a PaymentRecord Key from payment parameters.
+/// Creates a PaymentKey from payment parameters.
 ///
 /// # Parameters
 /// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `receiver` - Address of the payment receiver
-public fun create_payment_record_key<T: drop>(
+public fun create_payment_key<T: drop>(
     nonce: String,
     payment_amount: u64,
     receiver: address,
