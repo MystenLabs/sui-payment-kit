@@ -1,10 +1,10 @@
-# SUI Pay
+# Sui Payment Standard
 
 A secure payment processing system built on the Sui blockchain that provides reliable payment verification and receipt management.
 
 ## Technical Overview
 
-SUI Pay is a Move smart contract that enables secure, verifiable payments on the Sui network with built-in duplicate prevention and optional receipt persistence. The system is designed around payment registries that can be configured with custom policies for receipt management and expiration.
+Sui Payment Standard is a Move smart contract that enables secure, verifiable payments on the Sui network with built-in duplicate prevention and optional receipt persistence. The system is designed around payment registries that can be configured with custom policies for receipt management and expiration.
 
 ### PaymentRegistry
 
@@ -148,7 +148,7 @@ The test suite covers:
 
 ```move
 // Process payment without registry
-sui_pay::process_payment<SUI>(
+sui_payment_standard::process_payment<SUI>(
     ascii::string(b"payment_123"),  // payment_id
     1000,                           // amount in MIST
     coin,                           // Coin<SUI> object
@@ -161,21 +161,21 @@ sui_pay::process_payment<SUI>(
 
 ```move
 // 1. Create registry (one-time setup)
-let (mut registry, admin_cap) = sui_pay::create_registry(
+let (mut registry, admin_cap) = sui_payment_standard::create_registry(
     &mut namespace,
     ascii::string(b"my_store"),
     &mut ctx
 );
 
 // 2. Configure receipt policy (optional)
-let config = sui_pay::create_receipt_config(
+let config = sui_payment_standard::create_receipt_config(
     true,                    // write receipts
     option::some(86400000)   // 24-hour expiration
 );
-sui_pay::set_receipt_config(&mut registry, &admin_cap, config, &mut ctx);
+sui_payment_standard::set_receipt_config(&mut registry, &admin_cap, config, &mut ctx);
 
 // 3. Process payments
-let receipt = sui_pay::process_payment_in_registry<SUI>(
+let receipt = sui_payment_standard::process_payment_in_registry<SUI>(
     ascii::string(b"order_456"),
     2500,
     coin,
@@ -189,14 +189,14 @@ let receipt = sui_pay::process_payment_in_registry<SUI>(
 
 ```move
 // Clean up expired receipts
-let payment_key = sui_pay::create_payment_key(
+let payment_key = sui_payment_standard::create_payment_key(
     ascii::string(b"order_456"),
     2500,
     ascii::string(b"0x2::sui::SUI"),
     @0xbuyer
 );
 
-sui_pay::close_expired_receipt(
+sui_payment_standard::close_expired_receipt(
     &mut registry,
     payment_key,
     &mut ctx

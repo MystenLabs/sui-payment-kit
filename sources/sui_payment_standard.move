@@ -1,4 +1,4 @@
-module sui_pay::sui_pay;
+module sui_payment_standard::sui_payment_standard;
 
 use std::ascii::String;
 use std::type_name;
