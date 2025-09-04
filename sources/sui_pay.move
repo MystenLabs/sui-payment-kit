@@ -10,11 +10,15 @@ use sui::event;
 
 const EPaymentAlreadyExists: u64 = 0;
 const EIncorrectAmount: u64 = 1;
-const EReceiptDoesNotExist: u64 = 2;
-const EReceiptHasNotExpired: u64 = 3;
+const EPaymentRecordDoesNotExist: u64 = 2;
+const EPaymentRecordHasNotExpired: u64 = 3;
 const EUnauthorizedAdmin: u64 = 4;
 const ERegistryAlreadyExists: u64 = 5;
-const EREceiptConfigDoesNotExist: u64 = 6;
+const ERegistryNameLengthIsNotAllowed: u64 = 6;
+const ERegistryNameContainsInvalidCharacters: u64 = 7;
+const EInvalidNonce: u64 = 8;
+
+const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
 
 public struct Namespace has key {
     id: UID,
@@ -31,31 +35,30 @@ public struct PaymentRegistry has key {
 }
 
 public struct PaymentReceipt has copy, drop, store {
-    payment_id: String,
+    nonce: String,
     payment_amount: u64,
     receiver: address,
     coin_type: String,
     timestamp_ms: u64,
 }
 
-public struct PaymentKey has copy, drop, store {
-    payment_id: String,
+public struct PaymentKey<phantom T: drop> has copy, drop, store {
+    nonce: String,
     payment_amount: u64,
-    coin_type: String,
     receiver: address,
 }
 
-public struct PaymentReceiptTimestamp has copy, drop, store {
-    timestamp_ms: u64,
+public struct PaymentRecord has copy, drop, store {
+    epoch_at_time_of_record: u64,
 }
 
 /// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
 /// They are stored in a DynamicField within the registry, under their respective key structs.
-public struct ReceiptConfigKey() has copy, drop, store;
+public struct PaymentRecordConfigKey() has copy, drop, store;
 
-/// ReceiptConfig control whether receipts are written to the registry, and if so, whether they expire.
-public struct ReceiptConfig has copy, drop, store {
-    receipt_expiration_duration_ms: u64,
+/// ReceiptConfig controls when receipts expire.
+public struct PaymentRecordConfig has copy, drop, store {
+    epoch_expiration_duration: u64,
 }
 
 /// Initializes the module, creating and sharing the Namespace object.
@@ -76,7 +79,7 @@ public fun create_registry(
     name: String,
     ctx: &mut TxContext,
 ): (PaymentRegistry, RegistryAdminCap) {
-    // TODO - Do we want to enforce any rules on the name?
+    validate_registry_name(name);
 
     // If a name is provided, ensure no existing registry with that name exists
     assert!(!derived_object::exists(&namespace.id, name), ERegistryAlreadyExists);
@@ -99,25 +102,25 @@ public fun create_registry(
 public fun set_receipt_config(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
-    receipt_config: ReceiptConfig,
+    payment_record_config: PaymentRecordConfig,
     _ctx: &mut TxContext,
 ) {
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
 
-    let key = ReceiptConfigKey();
+    let key = PaymentRecordConfigKey();
 
-    df::remove_if_exists<ReceiptConfigKey, ReceiptConfig>(&mut registry.id, key);
+    df::remove_if_exists<PaymentRecordConfigKey, PaymentRecordConfig>(&mut registry.id, key);
     df::add(
         &mut registry.id,
         key,
-        receipt_config,
+        payment_record_config,
     );
 }
 
 /// Processes a payment (without the use of a Registry), emitting a payment receipt event.
 ///
 /// # Parameters
-/// * `payment_id` - Unique payment_id for the payment
+/// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
 /// * `receiver` - Address of the payment receiver
@@ -129,7 +132,7 @@ public fun set_receipt_config(
 /// # Returns
 /// The payment receipt
 public fun process_payment<T>(
-    payment_id: String,
+    nonce: String,
     payment_amount: u64,
     coin: Coin<T>,
     receiver: address,
@@ -144,11 +147,13 @@ public fun process_payment<T>(
     // This ensures that the caller cannot accidentally overpay or underpay.
     assert!(coin.value() == payment_amount, EIncorrectAmount);
 
+    validate_nonce(&nonce);
+
     let timestamp_ms = clock.timestamp_ms();
     transfer::public_transfer(coin, receiver);
 
     event::emit(PaymentReceipt {
-        payment_id,
+        nonce,
         payment_amount,
         receiver,
         coin_type,
@@ -156,7 +161,7 @@ public fun process_payment<T>(
     });
 
     PaymentReceipt {
-        payment_id,
+        nonce,
         payment_amount,
         receiver,
         coin_type,
@@ -167,7 +172,7 @@ public fun process_payment<T>(
 /// Processes a payment via a payment registry, writing a receipt to the registry.
 ///
 /// # Parameters
-/// * `payment_id` - Unique payment_id for the payment
+/// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
 /// * `receiver` - Address of the payment receiver
@@ -179,25 +184,25 @@ public fun process_payment<T>(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment_in_registry<T>(
+public fun process_payment_in_registry<T: drop>(
     registry: &mut PaymentRegistry,
-    payment_id: String,
+    nonce: String,
     payment_amount: u64,
     coin: Coin<T>,
     receiver: address,
     clock: &Clock,
-    _ctx: &mut TxContext,
+    ctx: &mut TxContext,
 ): PaymentReceipt {
     let receipt = process_payment(
-        payment_id,
+        nonce,
         payment_amount,
         coin,
         receiver,
         clock,
-        _ctx,
+        ctx,
     );
 
-    registry.write_payment_receipt(receipt);
+    registry.write_payment_record<T>(receipt, ctx);
 
     event::emit(
         receipt,
@@ -206,88 +211,125 @@ public fun process_payment_in_registry<T>(
     receipt
 }
 
-/// Removes an expired receipt from the registry.
+/// Removes an expired Payment Record from the Registry.
 ///
 /// # Parameters
 /// * `registry` - Payment registry containing the receipt
-/// * `payment_hash` - Hash of payment parameters identifying the receipt to close
+/// * `payment_record_key` - Hash of payment parameters used as the key for the PaymentRecord
 ///
 /// # Aborts
 /// * If receipt with payment hash does not exist
 /// * If receipt has not yet expired (when expiration is enabled)
-public fun close_expired_receipt(
+public fun delete_payment_record<T: drop>(
     registry: &mut PaymentRegistry,
-    key: PaymentKey,
-    clock: &Clock,
-    _ctx: &mut TxContext,
+    payment_record_key: PaymentKey<T>,
+    ctx: &mut TxContext,
 ) {
-    assert!(df::exists_(&registry.id, key), EReceiptDoesNotExist);
+    assert!(df::exists_(&registry.id, payment_record_key), EPaymentRecordDoesNotExist);
 
-    let receipt_config_ref = registry.receipt_config();
-    let payment_receipt_timestamp: &PaymentReceiptTimestamp = df::borrow(
+    let payment_record: &PaymentRecord = df::borrow(
         &registry.id,
-        key,
+        payment_record_key,
     );
 
-    let current_time = clock.timestamp_ms();
-    let expiration_time =
-        payment_receipt_timestamp.timestamp_ms + receipt_config_ref.receipt_expiration_duration_ms;
+    let current_epoch = ctx.epoch();
+    let expiration_duration = registry.payment_record_expiration_duration();
+    let expiration_epoch = payment_record.epoch_at_time_of_record + expiration_duration;
 
-    assert!(current_time >= expiration_time, EReceiptHasNotExpired);
+    assert!(current_epoch >= expiration_epoch, EPaymentRecordHasNotExpired);
 
-    df::remove<PaymentKey, PaymentReceiptTimestamp>(
+    df::remove<PaymentKey<T>, PaymentRecord>(
         &mut registry.id,
-        key,
+        payment_record_key,
     );
 }
 
-/// Writes a payment receipt to a dynamic field in the registry.
+/// Creates a PaymentRecord Key from payment parameters.
 ///
 /// # Parameters
-/// * `receipt`  - Receipt to write
-/// * `registry` - Payment registry to write the receipt to
+/// * `nonce` - Unique nonce for the payment
+/// * `payment_amount` - Expected payment amount
+/// * `receiver` - Address of the payment receiver
+public fun create_payment_record_key<T: drop>(
+    nonce: String,
+    payment_amount: u64,
+    receiver: address,
+): PaymentKey<T> {
+    PaymentKey {
+        nonce,
+        payment_amount,
+        receiver,
+    }
+}
+
+/// Writes a payment record to a dynamic field in the registry.
+///
+/// # Parameters
+/// * `registry` - Payment registry to write the PaymentRecord to
+/// * `receipt`  - Receipt to create a PaymentRecord from
 ///
 /// # Aborts
-/// * If a receipt with the same payment parameters already exists in the registry
-fun write_payment_receipt(registry: &mut PaymentRegistry, receipt: PaymentReceipt) {
-    let key = receipt.to_key();
+/// * If a PaymentRecord with the same payment parameters already exists in the registry
+fun write_payment_record<T: drop>(
+    registry: &mut PaymentRegistry,
+    receipt: PaymentReceipt,
+    ctx: &TxContext,
+) {
+    let key = receipt.to_payment_record_key<T>();
     assert!(!df::exists_(&registry.id, key), EPaymentAlreadyExists);
 
-    // Store only the timestamp in the dynamic field to save space
-    // The timestamp is used for expiration checks
-    let payment_receipt_timestamp = PaymentReceiptTimestamp {
-        timestamp_ms: receipt.timestamp_ms,
+    // Store only the current epoch in the dynamic field to save space
+    // The epoch is used for expiration checks
+    let payment_record = PaymentRecord {
+        epoch_at_time_of_record: ctx.epoch(),
     };
 
     df::add(
         &mut registry.id,
         key,
-        payment_receipt_timestamp,
+        payment_record,
     );
 }
 
-fun to_key(receipt: &PaymentReceipt): PaymentKey {
+fun to_payment_record_key<T: drop>(receipt: &PaymentReceipt): PaymentKey<T> {
     PaymentKey {
-        payment_id: receipt.payment_id,
+        nonce: receipt.nonce,
         payment_amount: receipt.payment_amount,
-        coin_type: receipt.coin_type,
         receiver: receipt.receiver,
     }
 }
 
-fun receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
-    let receipt_config_key = ReceiptConfigKey();
+fun payment_record_expiration_duration(registry: &PaymentRegistry): u64 {
+    let payment_record_config_key = PaymentRecordConfigKey();
 
-    assert!(df::exists_(&registry.id, receipt_config_key), EREceiptConfigDoesNotExist);
-
-    df::borrow<ReceiptConfigKey, ReceiptConfig>(
-        &registry.id,
-        receipt_config_key,
-    )
+    if (df::exists_(&registry.id, payment_record_config_key)) {
+        let payment_record_config_ref = df::borrow<PaymentRecordConfigKey, PaymentRecordConfig>(
+            &registry.id,
+            payment_record_config_key,
+        );
+        // If a PaymentRecordConfig is set, use its epoch_expiration_duration
+        payment_record_config_ref.epoch_expiration_duration
+    } else {
+        DEFAULT_EPOCH_EXPIRATION_DURATION
+    }
 }
 
 fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
     cap.registry_id == object::id(registry)
+}
+
+fun validate_registry_name(name: String) {
+    assert!(name.length() > 0 && name.length() <= 32, ERegistryNameLengthIsNotAllowed);
+
+    // Ensure name contains only lowercase letters and numbers (no special characters or spaces)
+    assert!(
+        name.as_bytes().all!(|c| (*c >= 97 && *c <= 122) || (*c >= 48 && *c <= 57)),
+        ERegistryNameContainsInvalidCharacters,
+    );
+}
+
+fun validate_nonce(nonce: &String) {
+    assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
 }
 
 #[test_only]
@@ -296,23 +338,8 @@ public fun init_for_testing(ctx: &mut TxContext) {
 }
 
 #[test_only]
-public fun create_payment_key(
-    payment_id: String,
-    payment_amount: u64,
-    coin_type: String,
-    receiver: address,
-): PaymentKey {
-    PaymentKey {
-        payment_id,
-        payment_amount,
-        coin_type,
-        receiver,
-    }
-}
-
-#[test_only]
-public fun create_receipt_config(receipt_expiration_duration_ms: u64): ReceiptConfig {
-    ReceiptConfig {
-        receipt_expiration_duration_ms,
+public fun create_payment_record_config(epoch_expiration_duration: u64): PaymentRecordConfig {
+    PaymentRecordConfig {
+        epoch_expiration_duration,
     }
 }

@@ -1,7 +1,6 @@
 #[test_only]
 module sui_pay::sui_pay_tests;
 
-use std::type_name;
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::sui::SUI;
@@ -59,7 +58,7 @@ fun test_create_registry() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(registry);
@@ -85,7 +84,7 @@ fun test_successful_payment_exact_amount() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
@@ -126,7 +125,7 @@ fun test_overpayment_failure() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1500); // More than expected
@@ -165,13 +164,13 @@ fun test_duplicate_payment_hash_failure() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing
-        let config = sui_pay::create_receipt_config(
-            0 // receipt_expiration_duration_ms
+        // Set config to enable payment record writing
+        let config = sui_pay::create_payment_record_config(
+            0 // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -228,7 +227,7 @@ fun test_insufficient_amount_failure() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 500); // Less than expected
@@ -267,7 +266,7 @@ fun test_multiple_different_nonces() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
@@ -332,7 +331,7 @@ fun test_zero_payment_amount() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         let coin = create_test_coin(&mut scenario, 1000);
@@ -374,7 +373,7 @@ fun test_large_nonce_values() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
@@ -402,9 +401,9 @@ fun test_large_nonce_values() {
     test_scenario::end(scenario);
 }
 
-/// Tests successfully closing an expired receipt (expiration duration = 0).
+/// Tests successfully deleting an expired payment record (expiration duration = 0 epochs).
 #[test]
-fun test_close_expired_receipt_success() {
+fun test_delete_expired_payment_record_success() {
     let mut scenario = setup_test_scenario();
 
     test_scenario::next_tx(&mut scenario, ALICE);
@@ -417,13 +416,13 @@ fun test_close_expired_receipt_success() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing with 0ms expiration
-        let config = sui_pay::create_receipt_config(
-            0 // receipt_expiration_duration_ms
+        // Set config to enable payment record writing with 0 epoch expiration
+        let config = sui_pay::create_payment_record_config(
+            0 // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -448,19 +447,16 @@ fun test_close_expired_receipt_success() {
             test_scenario::ctx(&mut scenario),
         );
 
-        // Create payment key to close the receipt
-        let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
-        let payment_key = sui_pay::create_payment_key(
+        // Create payment record key to delete the record
+        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
             payment_id,
             payment_amount,
-            coin_type,
             receiver,
         );
 
-        sui_pay::close_expired_receipt(
+        sui_pay::delete_payment_record<SUI>(
             &mut registry,
-            payment_key,
-            &clock,
+            payment_record_key,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -472,9 +468,9 @@ fun test_close_expired_receipt_success() {
     test_scenario::end(scenario);
 }
 
-/// Tests that closing a non-existent receipt fails with EReceiptDoesNotExist error.
+/// Tests that deleting a non-existent payment record fails with EPaymentRecordDoesNotExist error.
 #[test, expected_failure(abort_code = 2, location = sui_pay)]
-fun test_close_nonexistent_receipt() {
+fun test_delete_nonexistent_payment_record() {
     let mut scenario = setup_test_scenario();
 
     test_scenario::next_tx(&mut scenario, ALICE);
@@ -487,13 +483,13 @@ fun test_close_nonexistent_receipt() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing
-        let config = sui_pay::create_receipt_config(
-            1000 // receipt_expiration_duration_ms
+        // Set config to enable payment record writing
+        let config = sui_pay::create_payment_record_config(
+            1000 // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -504,19 +500,16 @@ fun test_close_nonexistent_receipt() {
 
         let clock = create_test_clock(&mut scenario);
 
-        // Create a fake payment key for a non-existent receipt
-        let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
-        let fake_payment_key = sui_pay::create_payment_key(
+        // Create a fake payment record key for a non-existent record
+        let fake_payment_record_key = sui_pay::create_payment_record_key<SUI>(
             std::ascii::string(b"99999"),
             1000,
-            coin_type,
             BOB,
         );
 
-        sui_pay::close_expired_receipt(
+        sui_pay::delete_payment_record<SUI>(
             &mut registry,
-            fake_payment_key,
-            &clock,
+            fake_payment_record_key,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -529,9 +522,9 @@ fun test_close_nonexistent_receipt() {
     test_scenario::end(scenario);
 }
 
-/// Tests that closing a receipt before expiration fails with EReceiptHasNotExpired error.
+/// Tests that deleting a payment record before expiration fails with EPaymentRecordHasNotExpired error.
 #[test, expected_failure(abort_code = 3, location = sui_pay)]
-fun test_close_receipt_not_expired() {
+fun test_delete_payment_record_not_expired() {
     let mut scenario = setup_test_scenario();
 
     test_scenario::next_tx(&mut scenario, ALICE);
@@ -544,13 +537,13 @@ fun test_close_receipt_not_expired() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing with 10s expiration
-        let config = sui_pay::create_receipt_config(
-            10000 // receipt_expiration_duration_ms
+        // Set config to enable payment record writing with large epoch expiration
+        let config = sui_pay::create_payment_record_config(
+            10000 // epoch_expiration_duration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -575,19 +568,16 @@ fun test_close_receipt_not_expired() {
             test_scenario::ctx(&mut scenario),
         );
 
-        // Create payment key to close the receipt
-        let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
-        let payment_key = sui_pay::create_payment_key(
+        // Create payment record key to delete the record
+        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
             payment_id,
             payment_amount,
-            coin_type,
             receiver,
         );
 
-        sui_pay::close_expired_receipt(
+        sui_pay::delete_payment_record<SUI>(
             &mut registry,
-            payment_key,
-            &clock,
+            payment_record_key,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -599,9 +589,9 @@ fun test_close_receipt_not_expired() {
     test_scenario::end(scenario);
 }
 
-/// Tests that closing a receipt succeeds when expiration duration is 0 (immediate expiration).
+/// Tests that deleting a payment record succeeds when expiration duration is 0 epochs (immediate expiration).
 #[test]
-fun test_close_receipt_immediate_expiration() {
+fun test_delete_payment_record_immediate_expiration() {
     let mut scenario = setup_test_scenario();
 
     test_scenario::next_tx(&mut scenario, ALICE);
@@ -614,13 +604,13 @@ fun test_close_receipt_immediate_expiration() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing with immediate expiration
-        let config = sui_pay::create_receipt_config(
-            0 // receipt_expiration_duration_ms - 0 means immediate expiration
+        // Set config to enable payment record writing with immediate expiration
+        let config = sui_pay::create_payment_record_config(
+            0 // epoch_expiration_duration - 0 means immediate expiration
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -645,19 +635,16 @@ fun test_close_receipt_immediate_expiration() {
             test_scenario::ctx(&mut scenario),
         );
 
-        // Create payment key to close the receipt
-        let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
-        let payment_key = sui_pay::create_payment_key(
+        // Create payment record key to delete the record
+        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
             payment_id,
             payment_amount,
-            coin_type,
             receiver,
         );
 
-        sui_pay::close_expired_receipt(
+        sui_pay::delete_payment_record<SUI>(
             &mut registry,
-            payment_key,
-            &clock,
+            payment_record_key,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -669,11 +656,10 @@ fun test_close_receipt_immediate_expiration() {
     test_scenario::end(scenario);
 }
 
-/// Tests that closing a receipt fails when using 30-day expiration duration.
+/// Tests that deleting a payment record fails when using 30 epoch expiration duration.
 #[test, expected_failure(abort_code = 3, location = sui_pay)]
-fun test_30_day_expiration_duration() {
+fun test_30_epoch_expiration_duration() {
     let mut scenario = setup_test_scenario();
-    let thirty_days_ms = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 
     test_scenario::next_tx(&mut scenario, ALICE);
     {
@@ -685,13 +671,13 @@ fun test_30_day_expiration_duration() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        // Set config to enable receipt writing with 30-day expiration
-        let config = sui_pay::create_receipt_config(
-            thirty_days_ms // receipt_expiration_duration_ms
+        // Set config to enable payment record writing with 30 epoch expiration
+        let config = sui_pay::create_payment_record_config(
+            30 // epoch_expiration_duration (30 epochs)
         );
         sui_pay::set_receipt_config(
             &mut registry,
@@ -716,19 +702,16 @@ fun test_30_day_expiration_duration() {
             test_scenario::ctx(&mut scenario),
         );
 
-        // Create payment key to close the receipt
-        let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
-        let payment_key = sui_pay::create_payment_key(
+        // Create payment record key to delete the record
+        let payment_record_key = sui_pay::create_payment_record_key<SUI>(
             payment_id,
             payment_amount,
-            coin_type,
             receiver,
         );
 
-        sui_pay::close_expired_receipt(
+        sui_pay::delete_payment_record<SUI>(
             &mut registry,
-            payment_key,
-            &clock,
+            payment_record_key,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -740,7 +723,139 @@ fun test_30_day_expiration_duration() {
     test_scenario::end(scenario);
 }
 
-/// Tests setting receipt config as admin.
+/// Tests creating registry with valid alphanumeric names.
+#[test]
+fun test_valid_registry_names() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Test various valid alphanumeric names
+        let (registry1, cap1) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"test123"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry1);
+        test_utils::destroy(cap1);
+        
+        let (registry2, cap2) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"abc"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry2);
+        test_utils::destroy(cap2);
+        
+        let (registry3, cap3) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"registry123abc"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry3);
+        test_utils::destroy(cap3);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with special characters fails.
+#[test, expected_failure(abort_code = 7, location = sui_pay)]
+fun test_invalid_registry_name_special_chars() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Should fail - contains underscore
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"test_registry"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with too long name fails.
+#[test, expected_failure(abort_code = 6, location = sui_pay)]
+fun test_invalid_registry_name_too_long() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Should fail - 33 characters (exceeds 32 character limit)
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b"123456789012345678901234567890123"),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that creating registry with empty name fails.
+#[test, expected_failure(abort_code = 6, location = sui_pay)]
+fun test_invalid_registry_name_empty() {
+    let mut scenario = setup_test_scenario();
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        sui_pay::init_for_testing(test_scenario::ctx(&mut scenario));
+    };
+
+    test_scenario::next_tx(&mut scenario, ALICE);
+    {
+        let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
+        
+        // Should fail - empty name
+        let (registry, cap) = sui_pay::create_registry(
+            &mut namespace,
+            std::ascii::string(b""),
+            test_scenario::ctx(&mut scenario),
+        );
+        test_utils::destroy(registry);
+        test_utils::destroy(cap);
+        
+        test_scenario::return_shared(namespace);
+    };
+
+    test_scenario::end(scenario);
+}
+
+/// Tests setting payment record config as admin.
 #[test]
 fun test_set_config_success() {
     let mut scenario = setup_test_scenario();
@@ -755,12 +870,12 @@ fun test_set_config_success() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
 
-        let config = sui_pay::create_receipt_config(
-            1000 // receipt_expiration_duration_ms
+        let config = sui_pay::create_payment_record_config(
+            1000 // epoch_expiration_duration
         );
 
         sui_pay::set_receipt_config(
@@ -793,7 +908,7 @@ fun test_set_config_unauthorized() {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
         let (mut registry, bob_cap) = sui_pay::create_registry(
             &mut namespace,
-            std::ascii::string(b"test_registry"),
+            std::ascii::string(b"testregistry"),
             test_scenario::ctx(&mut scenario),
         );
         test_scenario::return_shared(namespace);
@@ -803,13 +918,13 @@ fun test_set_config_unauthorized() {
             let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
             let (alice_registry, alice_cap) = sui_pay::create_registry(
                 &mut namespace,
-                std::ascii::string(b"alice_registry"),
+                std::ascii::string(b"aliceregistry"),
                 test_scenario::ctx(&mut scenario),
             );
             test_utils::destroy(alice_registry);
             
-            let config = sui_pay::create_receipt_config(
-                1000 // receipt_expiration_duration_ms
+            let config = sui_pay::create_payment_record_config(
+                1000 // epoch_expiration_duration
             );
 
             // ALICE tries to set config on BOB's registry with her cap - should fail
