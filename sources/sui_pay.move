@@ -2,8 +2,8 @@ module sui_pay::sui_pay;
 
 use std::ascii::String;
 use std::type_name;
-use sui::clock::{Self, Clock};
-use sui::coin::{Self, Coin};
+use sui::clock::Clock;
+use sui::coin::Coin;
 use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
@@ -102,7 +102,7 @@ public fun set_receipt_config(
     receipt_config: ReceiptConfig,
     _ctx: &mut TxContext,
 ) {
-    assert!(registry.cap_id == object::id(cap), EUnauthorizedAdmin);
+    assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
 
     let key = ReceiptConfigKey();
 
@@ -142,10 +142,9 @@ public fun process_payment<T>(
 
     // If the coin amount does not match the expected payment amount, abort.
     // This ensures that the caller cannot accidentally overpay or underpay.
-    let actual_amount = coin::value(&coin);
-    assert!(actual_amount == payment_amount, EIncorrectAmount);
+    assert!(coin.value() == payment_amount, EIncorrectAmount);
 
-    let timestamp_ms = clock::timestamp_ms(clock);
+    let timestamp_ms = clock.timestamp_ms();
     transfer::public_transfer(coin, receiver);
 
     event::emit(PaymentReceipt {
@@ -198,7 +197,7 @@ public fun process_payment_in_registry<T>(
         _ctx,
     );
 
-    write_payment_receipt(registry, receipt);
+    registry.write_payment_receipt(receipt);
 
     event::emit(
         receipt,
@@ -219,17 +218,18 @@ public fun process_payment_in_registry<T>(
 public fun close_expired_receipt(
     registry: &mut PaymentRegistry,
     key: PaymentKey,
-    ctx: &mut TxContext,
+    clock: &Clock,
+    _ctx: &mut TxContext,
 ) {
     assert!(df::exists_(&registry.id, key), EReceiptDoesNotExist);
 
-    let receipt_config_ref = get_receipt_config(registry);
+    let receipt_config_ref = registry.receipt_config();
     let payment_receipt_timestamp: &PaymentReceiptTimestamp = df::borrow(
         &registry.id,
         key,
     );
 
-    let current_time = sui::tx_context::epoch_timestamp_ms(ctx);
+    let current_time = clock.timestamp_ms();
     let expiration_time =
         payment_receipt_timestamp.timestamp_ms + receipt_config_ref.receipt_expiration_duration_ms;
 
@@ -275,7 +275,7 @@ fun to_key(receipt: &PaymentReceipt): PaymentKey {
     }
 }
 
-fun get_receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
+fun receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
     let receipt_config_key = ReceiptConfigKey();
 
     assert!(df::exists_(&registry.id, receipt_config_key), EREceiptConfigDoesNotExist);
@@ -284,6 +284,10 @@ fun get_receipt_config(registry: &PaymentRegistry): &ReceiptConfig {
         &registry.id,
         receipt_config_key,
     )
+}
+
+fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
+    cap.registry_id == object::id(registry)
 }
 
 #[test_only]

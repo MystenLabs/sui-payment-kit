@@ -79,7 +79,7 @@ SUI Pay is a Move smart contract that enables secure, verifiable payments on the
 2. **Configuration** (Optional)
 
    ```move
-   set_receipt_config(&mut registry, &cap, config, ctx)
+   registry.set_receipt_config(&cap, config, ctx)
    ```
 
 3. **Payment Processing**

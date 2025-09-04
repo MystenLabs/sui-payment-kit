@@ -460,6 +460,7 @@ fun test_close_expired_receipt_success() {
         sui_pay::close_expired_receipt(
             &mut registry,
             payment_key,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -501,6 +502,8 @@ fun test_close_nonexistent_receipt() {
             test_scenario::ctx(&mut scenario),
         );
 
+        let clock = create_test_clock(&mut scenario);
+
         // Create a fake payment key for a non-existent receipt
         let coin_type = type_name::into_string(type_name::with_defining_ids<SUI>());
         let fake_payment_key = sui_pay::create_payment_key(
@@ -513,9 +516,11 @@ fun test_close_nonexistent_receipt() {
         sui_pay::close_expired_receipt(
             &mut registry,
             fake_payment_key,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
 
+        test_utils::destroy(clock);
         test_utils::destroy(registry);
         test_utils::destroy(cap);
         test_scenario::return_shared(namespace);
@@ -582,6 +587,7 @@ fun test_close_receipt_not_expired() {
         sui_pay::close_expired_receipt(
             &mut registry,
             payment_key,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -651,6 +657,7 @@ fun test_close_receipt_immediate_expiration() {
         sui_pay::close_expired_receipt(
             &mut registry,
             payment_key,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
@@ -721,6 +728,7 @@ fun test_30_day_expiration_duration() {
         sui_pay::close_expired_receipt(
             &mut registry,
             payment_key,
+            &clock,
             test_scenario::ctx(&mut scenario),
         );
         test_utils::destroy(clock);
