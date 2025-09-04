@@ -163,7 +163,7 @@ fun test_duplicate_payment_hash_failure() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -174,8 +174,8 @@ fun test_duplicate_payment_hash_failure() {
             0 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -415,7 +415,7 @@ fun test_close_expired_receipt_success() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -426,8 +426,8 @@ fun test_close_expired_receipt_success() {
             0 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -459,7 +459,6 @@ fun test_close_expired_receipt_success() {
 
         sui_pay::close_expired_receipt(
             &mut registry,
-            &cap,
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
@@ -485,7 +484,7 @@ fun test_close_nonexistent_receipt() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -496,8 +495,8 @@ fun test_close_nonexistent_receipt() {
             1000 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -513,7 +512,6 @@ fun test_close_nonexistent_receipt() {
 
         sui_pay::close_expired_receipt(
             &mut registry,
-            &cap,
             fake_payment_key,
             test_scenario::ctx(&mut scenario),
         );
@@ -539,7 +537,7 @@ fun test_close_receipt_not_expired() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -550,8 +548,8 @@ fun test_close_receipt_not_expired() {
             10000 // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -583,7 +581,6 @@ fun test_close_receipt_not_expired() {
 
         sui_pay::close_expired_receipt(
             &mut registry,
-            &cap,
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
@@ -609,7 +606,7 @@ fun test_close_receipt_immediate_expiration() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -620,8 +617,8 @@ fun test_close_receipt_immediate_expiration() {
             0 // receipt_expiration_duration_ms - 0 means immediate expiration
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -653,7 +650,6 @@ fun test_close_receipt_immediate_expiration() {
 
         sui_pay::close_expired_receipt(
             &mut registry,
-            &cap,
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
@@ -680,7 +676,7 @@ fun test_30_day_expiration_duration() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (mut registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -691,8 +687,8 @@ fun test_30_day_expiration_duration() {
             thirty_days_ms // receipt_expiration_duration_ms
         );
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -724,7 +720,6 @@ fun test_30_day_expiration_duration() {
 
         sui_pay::close_expired_receipt(
             &mut registry,
-            &cap,
             payment_key,
             test_scenario::ctx(&mut scenario),
         );
@@ -750,7 +745,7 @@ fun test_set_config_success() {
     test_scenario::next_tx(&mut scenario, ALICE);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (registry, mut cap) = sui_pay::create_registry(
+        let (mut registry, cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -761,8 +756,8 @@ fun test_set_config_success() {
         );
 
         sui_pay::set_receipt_config(
-            &registry,
-            &mut cap,
+            &mut registry,
+            &cap,
             config,
             test_scenario::ctx(&mut scenario),
         );
@@ -788,7 +783,7 @@ fun test_set_config_unauthorized() {
     test_scenario::next_tx(&mut scenario, BOB);
     {
         let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-        let (registry, bob_cap) = sui_pay::create_registry(
+        let (mut registry, bob_cap) = sui_pay::create_registry(
             &mut namespace,
             std::ascii::string(b"test_registry"),
             test_scenario::ctx(&mut scenario),
@@ -798,7 +793,7 @@ fun test_set_config_unauthorized() {
         test_scenario::next_tx(&mut scenario, ALICE);
         {
             let mut namespace = test_scenario::take_shared<sui_pay::Namespace>(&scenario);
-            let (alice_registry, mut alice_cap) = sui_pay::create_registry(
+            let (alice_registry, alice_cap) = sui_pay::create_registry(
                 &mut namespace,
                 std::ascii::string(b"alice_registry"),
                 test_scenario::ctx(&mut scenario),
@@ -811,8 +806,8 @@ fun test_set_config_unauthorized() {
 
             // ALICE tries to set config on BOB's registry with her cap - should fail
             sui_pay::set_receipt_config(
-                &registry,
-                &mut alice_cap,
+                &mut registry,
+                &alice_cap,
                 config,
                 test_scenario::ctx(&mut scenario),
             );
