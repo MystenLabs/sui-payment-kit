@@ -213,42 +213,33 @@ fun test_duplicate_payment_hash_failure() {
 }
 
 /// Tests that providing insufficient coin amount fails with EInsufficientAmount error.
-#[test, expected_failure(abort_code = 1, location = sui_payment_standard)]
+#[test, expected_failure(abort_code = sui_payment_standard::EInsufficientAmount)]
 fun test_insufficient_amount_failure() {
     let mut scenario = setup_test_scenario();
 
-    test_scenario::next_tx(&mut scenario, ALICE);
-    {
-        sui_payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
-    };
+    scenario.next_tx(ALICE);
+    sui_payment_standard::init_for_testing(scenario.ctx());
 
-    test_scenario::next_tx(&mut scenario, ALICE);
-    {
-        let mut namespace = test_scenario::take_shared<sui_payment_standard::Namespace>(&scenario);
-        let (mut registry, cap) = sui_payment_standard::create_registry(
-            &mut namespace,
-            std::ascii::string(b"testregistry"),
-            test_scenario::ctx(&mut scenario),
-        );
-        let coin = create_test_coin(&mut scenario, 500); // Less than expected
-        let clock = create_test_clock(&mut scenario);
+    scenario.next_tx(ALICE);
 
-        let _receipt = sui_payment_standard::process_payment_in_registry<SUI>(
-            &mut registry,
-            std::ascii::string(b"12345"),
-            1000, // Expected 1000 but coin only has 500
-            coin,
-            BOB,
-            &clock,
-            test_scenario::ctx(&mut scenario),
-        );
-        test_utils::destroy(clock);
-        test_utils::destroy(registry);
-        test_utils::destroy(cap);
-        test_scenario::return_shared(namespace);
-    };
+    let mut namespace = scenario.take_shared<sui_payment_standard::Namespace>();
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+    let coin = create_test_coin(&mut scenario, 500); // Less than expected
+    let clock = create_test_clock(&mut scenario);
 
-    test_scenario::end(scenario);
+    let _receipt = sui_payment_standard::process_payment_in_registry<SUI>(
+        &mut registry,
+        std::ascii::string(b"12345"),
+        1000, // Expected 1000 but coin only has 500
+        coin,
+        BOB,
+        &clock,
+        test_scenario::ctx(&mut scenario),
+    );
+    abort
 }
 
 /// Tests processing multiple payments with different nonces successfully.
