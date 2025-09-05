@@ -2,6 +2,7 @@ module sui_payment_standard::sui_payment_standard;
 
 use std::ascii::String;
 use std::type_name;
+use sui::balance::Balance;
 use sui::clock::Clock;
 use sui::coin::Coin;
 use sui::derived_object;
@@ -17,16 +18,16 @@ const ERegistryAlreadyExists: u64 = 5;
 const ERegistryNameLengthIsNotAllowed: u64 = 6;
 const ERegistryNameContainsInvalidCharacters: u64 = 7;
 const EInvalidNonce: u64 = 8;
+const ERegistryMustBeReceiver: u64 = 9;
+const EReceiverMustBeProvided: u64 = 10;
+const ERegistryBalanceDoesNotExist: u64 = 11;
 
 const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
 
+const DEFAULT_REGISTRY_NAME: vector<u8> = b"payment-registry";
+
 public struct Namespace has key {
     id: UID,
-}
-
-public struct RegistryAdminCap has key, store {
-    id: UID,
-    registry_id: ID,
 }
 
 public struct PaymentRegistry has key {
@@ -34,7 +35,13 @@ public struct PaymentRegistry has key {
     cap_id: ID,
 }
 
+public struct RegistryAdminCap has key, store {
+    id: UID,
+    registry_id: ID,
+}
+
 public struct PaymentReceipt has copy, drop, store {
+    payment_type: PaymentType,
     nonce: String,
     payment_amount: u64,
     receiver: address,
@@ -42,7 +49,12 @@ public struct PaymentReceipt has copy, drop, store {
     timestamp_ms: u64,
 }
 
-public struct PaymentKey<phantom T: drop> has copy, drop, store {
+public enum PaymentType has copy, drop, store {
+    Ephemeral,
+    Registry(ID),
+}
+
+public struct PaymentKey<phantom T> has copy, drop, store {
     nonce: String,
     payment_amount: u64,
     receiver: address,
@@ -52,18 +64,26 @@ public struct PaymentRecord has copy, drop, store {
     epoch_at_time_of_record: u64,
 }
 
+public struct BalanceKey<phantom T>() has copy, drop, store;
+
 /// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
 /// They are stored in a DynamicField within the registry, under their respective key structs.
-public struct PaymentRecordConfigKey() has copy, drop, store;
+public struct RegistryConfigKey() has copy, drop, store;
 
-/// ReceiptConfig controls when receipts expire.
-public struct PaymentRecordConfig has copy, drop, store {
+/// RegistryConfig holds configuration options for a PaymentRegistry.
+public struct RegistryConfig has copy, drop, store {
     epoch_expiration_duration: u64,
+    registry_managed_funds: bool,
 }
 
 /// Initializes the module, creating and sharing the Namespace object.
 fun init(ctx: &mut TxContext) {
-    transfer::share_object(Namespace { id: object::new(ctx) });
+    let mut namespace = Namespace { id: object::new(ctx) };
+    let (registry, cap) = namespace.create_registry(DEFAULT_REGISTRY_NAME.to_ascii_string(), ctx);
+
+    transfer::share_object(namespace);
+    transfer::transfer(cap, ctx.sender());
+    registry.share();
 }
 
 /// Creates a new payment registry
@@ -99,24 +119,6 @@ public fun create_registry(
     )
 }
 
-public fun set_receipt_config(
-    registry: &mut PaymentRegistry,
-    cap: &RegistryAdminCap,
-    payment_record_config: PaymentRecordConfig,
-    _ctx: &mut TxContext,
-) {
-    assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
-
-    let key = PaymentRecordConfigKey();
-
-    df::remove_if_exists<PaymentRecordConfigKey, PaymentRecordConfig>(&mut registry.id, key);
-    df::add(
-        &mut registry.id,
-        key,
-        payment_record_config,
-    );
-}
-
 /// Processes a payment (without the use of a Registry), emitting a payment receipt event.
 ///
 /// # Parameters
@@ -124,6 +126,7 @@ public fun set_receipt_config(
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
 /// * `receiver` - Address of the payment receiver
+/// * `clock` - Reference to the Clock object
 ///
 /// # Aborts
 /// * If the coin amount does not match the expected payment amount
@@ -139,34 +142,19 @@ public fun process_payment<T>(
     clock: &Clock,
     _ctx: &mut TxContext,
 ): PaymentReceipt {
-    let coin_type = type_name::into_string(
-        type_name::with_defining_ids<T>(),
+    let receipt = PaymentType::Ephemeral.internal_create_receipt(
+        &coin,
+        payment_amount,
+        nonce,
+        receiver,
+        clock,
     );
 
-    // If the coin amount does not match the expected payment amount, abort.
-    // This ensures that the caller cannot accidentally overpay or underpay.
-    assert!(coin.value() == payment_amount, EIncorrectAmount);
-
-    validate_nonce(&nonce);
-
-    let timestamp_ms = clock.timestamp_ms();
+    // Transfer the coin to the receiver.
     transfer::public_transfer(coin, receiver);
 
-    event::emit(PaymentReceipt {
-        nonce,
-        payment_amount,
-        receiver,
-        coin_type,
-        timestamp_ms,
-    });
-
-    PaymentReceipt {
-        nonce,
-        payment_amount,
-        receiver,
-        coin_type,
-        timestamp_ms,
-    }
+    // return the receipt for PTB consumption.
+    receipt
 }
 
 /// Processes a payment via a payment registry, writing a receipt to the registry.
@@ -175,7 +163,7 @@ public fun process_payment<T>(
 /// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
-/// * `receiver` - Address of the payment receiver
+/// * `receiver` - (Mutable) Address of the payment receiver
 /// * `registry` - Payment registry to write the receipt to
 ///
 /// # Aborts
@@ -184,27 +172,71 @@ public fun process_payment<T>(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment_in_registry<T: drop>(
+public fun process_payment_in_registry<T>(
     registry: &mut PaymentRegistry,
     nonce: String,
     payment_amount: u64,
     coin: Coin<T>,
-    receiver: address,
+    mut receiver: Option<address>,
     clock: &Clock,
     ctx: &mut TxContext,
 ): PaymentReceipt {
-    let receipt = process_payment(
-        nonce,
+    let config = registry.registry_config();
+
+    // Validate receiver requirements based on registry configuration BEFORE consuming it
+    if (config.registry_managed_funds) {
+        assert!(
+            receiver.is_none() || receiver.is_some_and!(|r| r == registry.id.to_address()),
+            ERegistryMustBeReceiver,
+        );
+    } else {
+        assert!(receiver.is_some(), EReceiverMustBeProvided);
+    };
+
+    // Extract the actual receiver address for use in receipt and transfer
+    let actual_receiver = receiver.extract_or!(registry.id.to_address());
+
+    let receipt = PaymentType::Registry(registry.id.to_inner()).internal_create_receipt(
+        &coin,
         payment_amount,
-        coin,
-        receiver,
+        nonce,
+        actual_receiver,
         clock,
-        ctx,
     );
+
+    if (config.registry_managed_funds) {
+        registry.collect_payment(coin);
+    } else {
+        // Transfer the coin to the receiver.
+        transfer::public_transfer(coin, actual_receiver);
+    };
+    event::emit(receipt);
 
     registry.write_payment_record<T>(receipt, ctx);
 
+    // Return the receipt for consumption
     receipt
+}
+
+/// If the registry is configured to manage funds, withdraw all funds of the specified coin from the registry.
+///
+/// # Parameters
+/// * `registry` - Payment registry to withdraw funds from
+/// * `cap` - Admin capability for the registry
+///
+/// # Aborts
+/// * If the caller does not have the admin capability for the registry
+/// * If there are no funds of the specified coin type in the registry
+public fun withdraw_from_registry<T>(
+    registry: &mut PaymentRegistry,
+    cap: &RegistryAdminCap,
+    ctx: &mut TxContext,
+): Coin<T> {
+    assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+    let key = BalanceKey<T>();
+
+    assert!(df::exists_(&registry.id, key), ERegistryBalanceDoesNotExist);
+    df::borrow_mut<_, Balance<T>>(&mut registry.id, key).withdraw_all().into_coin(ctx)
 }
 
 /// Removes an expired Payment Record from the Registry.
@@ -216,12 +248,14 @@ public fun process_payment_in_registry<T: drop>(
 /// # Aborts
 /// * If receipt with payment hash does not exist
 /// * If receipt has not yet expired (when expiration is enabled)
-public fun delete_payment_record<T: drop>(
+public fun delete_payment_record<T>(
     registry: &mut PaymentRegistry,
     payment_key: PaymentKey<T>,
     ctx: &mut TxContext,
 ) {
     assert!(df::exists_(&registry.id, payment_key), EPaymentRecordDoesNotExist);
+
+    let config = registry.registry_config();
 
     let payment_record: &PaymentRecord = df::borrow(
         &registry.id,
@@ -229,12 +263,12 @@ public fun delete_payment_record<T: drop>(
     );
 
     let current_epoch = ctx.epoch();
-    let expiration_duration = registry.payment_record_expiration_duration();
+    let expiration_duration = config.epoch_expiration_duration;
     let expiration_epoch = payment_record.epoch_at_time_of_record + expiration_duration;
 
     assert!(current_epoch >= expiration_epoch, EPaymentRecordHasNotExpired);
 
-    df::remove<PaymentKey<T>, PaymentRecord>(
+    df::remove<_, PaymentRecord>(
         &mut registry.id,
         payment_key,
     );
@@ -246,7 +280,7 @@ public fun delete_payment_record<T: drop>(
 /// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `receiver` - Address of the payment receiver
-public fun create_payment_key<T: drop>(
+public fun create_payment_key<T>(
     nonce: String,
     payment_amount: u64,
     receiver: address,
@@ -258,15 +292,99 @@ public fun create_payment_key<T: drop>(
     }
 }
 
-/// Writes a payment record to a dynamic field in the registry.
-///
+/// Creates a RegistryConfig instance.
 /// # Parameters
-/// * `registry` - Payment registry to write the PaymentRecord to
-/// * `receipt`  - Receipt to create a PaymentRecord from
+/// * `epoch_expiration_duration` - Number of epochs after which a payment record expires
+/// * `registry_managed_funds` - Whether the registry should manage funds (collect payments into its balance)
 ///
+/// # Returns
+/// A new RegistryConfig instance
+public fun create_registry_config(
+    epoch_expiration_duration: u64,
+    registry_managed_funds: bool,
+): RegistryConfig {
+    RegistryConfig {
+        epoch_expiration_duration,
+        registry_managed_funds,
+    }
+}
+
+/// Sets the RegistryConfig for the registry.
+/// # Parameters
+/// * `registry` - Payment registry to set the config for
+/// * `cap` - Admin capability for the registry
+/// * `registry_config` - New configuration to set
 /// # Aborts
-/// * If a PaymentRecord with the same payment parameters already exists in the registry
-fun write_payment_record<T: drop>(
+/// * If the caller does not have the admin capability for the registry
+public fun set_registry_config(
+    registry: &mut PaymentRegistry,
+    cap: &RegistryAdminCap,
+    registry_config: RegistryConfig,
+    _ctx: &mut TxContext,
+) {
+    assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+
+    let key = RegistryConfigKey();
+
+    df::remove_if_exists<_, RegistryConfig>(&mut registry.id, key);
+    df::add(
+        &mut registry.id,
+        key,
+        registry_config,
+    );
+}
+
+/// Enforce that a registry will always be shared.
+/// # Parameters
+/// * `registry` - The PaymentRegistry to share
+public fun share(registry: PaymentRegistry) {
+    transfer::share_object(registry);
+}
+
+/// Retrieves the RegistryConfig for the registry, or the default if none is set.
+fun registry_config(registry: &PaymentRegistry): RegistryConfig {
+    let key = RegistryConfigKey();
+    if (df::exists_(&registry.id, key)) {
+        *df::borrow<_, RegistryConfig>(&registry.id, key)
+    } else {
+        default_registry_config()
+    }
+}
+
+/// Validate the inputs & produce a receipt.
+fun internal_create_receipt<T>(
+    payment_type: PaymentType,
+    coin: &Coin<T>,
+    payment_amount: u64,
+    nonce: String,
+    receiver: address,
+    clock: &Clock,
+): PaymentReceipt {
+    let coin_type = type_name::with_defining_ids<T>().into_string();
+    // If the coin amount does not match the expected payment amount, abort.
+    // This ensures that the caller cannot accidentally overpay or underpay.
+    assert!(coin.value() == payment_amount, EIncorrectAmount);
+    validate_nonce(&nonce);
+
+    let timestamp_ms = clock.timestamp_ms();
+
+    let receipt = PaymentReceipt {
+        payment_type,
+        nonce,
+        payment_amount,
+        receiver,
+        coin_type,
+        timestamp_ms,
+    };
+
+    // Emit the receipt event.
+    event::emit(receipt);
+
+    receipt
+}
+
+/// Writes a payment record to a dynamic field in the registry.
+fun write_payment_record<T>(
     registry: &mut PaymentRegistry,
     receipt: PaymentReceipt,
     ctx: &TxContext,
@@ -287,7 +405,8 @@ fun write_payment_record<T: drop>(
     );
 }
 
-fun to_payment_record_key<T: drop>(receipt: &PaymentReceipt): PaymentKey<T> {
+/// Converts a PaymentReceipt into a PaymentKey for storage/retrieval of the corresponding PaymentRecord.
+fun to_payment_record_key<T>(receipt: &PaymentReceipt): PaymentKey<T> {
     PaymentKey {
         nonce: receipt.nonce,
         payment_amount: receipt.payment_amount,
@@ -295,25 +414,30 @@ fun to_payment_record_key<T: drop>(receipt: &PaymentReceipt): PaymentKey<T> {
     }
 }
 
-fun payment_record_expiration_duration(registry: &PaymentRegistry): u64 {
-    let payment_record_config_key = PaymentRecordConfigKey();
-
-    if (df::exists_(&registry.id, payment_record_config_key)) {
-        let payment_record_config_ref = df::borrow<PaymentRecordConfigKey, PaymentRecordConfig>(
-            &registry.id,
-            payment_record_config_key,
-        );
-        // If a PaymentRecordConfig is set, use its epoch_expiration_duration
-        payment_record_config_ref.epoch_expiration_duration
-    } else {
-        DEFAULT_EPOCH_EXPIRATION_DURATION
+fun default_registry_config(): RegistryConfig {
+    RegistryConfig {
+        epoch_expiration_duration: DEFAULT_EPOCH_EXPIRATION_DURATION,
+        // By default, registries do not manage funds.
+        registry_managed_funds: false,
     }
 }
 
+/// If the registry is configured to manage funds, collects a payment into the registry's balance.
+fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
+    let key = BalanceKey<T>();
+    if (df::exists_(&registry.id, key)) {
+        df::borrow_mut<_, Balance<T>>(&mut registry.id, key).join(coin.into_balance());
+    } else {
+        df::add(&mut registry.id, key, coin.into_balance());
+    }
+}
+
+/// Checks if the provided admin capability is valid for the given registry.
 fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
     cap.registry_id == object::id(registry)
 }
 
+/// Validates that a registry name conforms to SuiNS standards:
 fun validate_registry_name(name: String) {
     assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
 
@@ -338,6 +462,7 @@ fun validate_registry_name(name: String) {
     assert!(*bytes.borrow(len - 1) != 45, ERegistryNameContainsInvalidCharacters);
 }
 
+/// Validates that a nonce is non-empty and does not exceed 36 characters.
 fun validate_nonce(nonce: &String) {
     assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
 }
@@ -345,11 +470,4 @@ fun validate_nonce(nonce: &String) {
 #[test_only]
 public fun init_for_testing(ctx: &mut TxContext) {
     init(ctx);
-}
-
-#[test_only]
-public fun create_payment_record_config(epoch_expiration_duration: u64): PaymentRecordConfig {
-    PaymentRecordConfig {
-        epoch_expiration_duration,
-    }
 }

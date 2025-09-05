@@ -1,5 +1,5 @@
 #[test_only]
-module sui_payment_standard::sui_pay_tests;
+module sui_payment_standard::sui_payment_standard_tests;
 
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
@@ -95,7 +95,7 @@ fun test_successful_payment_exact_amount() {
             std::ascii::string(b"12345"), // payment_id
             1000, // payment_amount
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -136,7 +136,7 @@ fun test_overpayment_failure() {
             std::ascii::string(b"67890"), // salt
             1000, // payment_amount - less than coin value
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -169,10 +169,11 @@ fun test_duplicate_payment_hash_failure() {
         );
 
         // Set config to enable payment record writing
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             0, // epoch_expiration_duration
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -188,7 +189,7 @@ fun test_duplicate_payment_hash_failure() {
             std::ascii::string(b"12345"),
             1000, // payment_amount
             coin1,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -199,7 +200,7 @@ fun test_duplicate_payment_hash_failure() {
             std::ascii::string(b"12345"), // Same salt
             1000, // Same payment_amount
             coin2,
-            BOB, // Same receiver
+            std::option::some(BOB), // Same receiver
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -238,7 +239,7 @@ fun test_insufficient_amount_failure() {
             std::ascii::string(b"12345"),
             1000, // Expected 1000 but coin only has 500
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -279,7 +280,7 @@ fun test_multiple_different_nonces() {
             std::ascii::string(b"1"),
             1000,
             coin1,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -290,7 +291,7 @@ fun test_multiple_different_nonces() {
             std::ascii::string(b"2"),
             1500,
             coin2,
-            CHARLIE,
+            std::option::some(CHARLIE),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -301,7 +302,7 @@ fun test_multiple_different_nonces() {
             std::ascii::string(b"3"),
             500,
             coin3,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -342,7 +343,7 @@ fun test_zero_payment_amount() {
             std::ascii::string(b"12345"),
             1000, // payment amount
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -386,7 +387,7 @@ fun test_large_nonce_values() {
             std::ascii::string(b"18446744073709551615"), // Large salt
             1000,
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -421,10 +422,11 @@ fun test_delete_expired_payment_record_success() {
         );
 
         // Set config to enable payment record writing with 0 epoch expiration
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             0, // epoch_expiration_duration
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -442,7 +444,7 @@ fun test_delete_expired_payment_record_success() {
             payment_id,
             payment_amount,
             coin,
-            receiver,
+            std::option::some(receiver),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -488,10 +490,11 @@ fun test_delete_nonexistent_payment_record() {
         );
 
         // Set config to enable payment record writing
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             1000, // epoch_expiration_duration
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -542,10 +545,11 @@ fun test_delete_payment_record_not_expired() {
         );
 
         // Set config to enable payment record writing with large epoch expiration
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             10000, // epoch_expiration_duration
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -563,7 +567,7 @@ fun test_delete_payment_record_not_expired() {
             payment_id,
             payment_amount,
             coin,
-            receiver,
+            std::option::some(receiver),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -609,10 +613,11 @@ fun test_delete_payment_record_immediate_expiration() {
         );
 
         // Set config to enable payment record writing with immediate expiration
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             0, // epoch_expiration_duration - 0 means immediate expiration
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -630,7 +635,7 @@ fun test_delete_payment_record_immediate_expiration() {
             payment_id,
             payment_amount,
             coin,
-            receiver,
+            std::option::some(receiver),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -676,10 +681,11 @@ fun test_30_epoch_expiration_duration() {
         );
 
         // Set config to enable payment record writing with 30 epoch expiration
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             30, // epoch_expiration_duration (30 epochs)
+            false, // registry_managed_funds
         );
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -697,7 +703,7 @@ fun test_30_epoch_expiration_duration() {
             payment_id,
             payment_amount,
             coin,
-            receiver,
+            std::option::some(receiver),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -874,11 +880,12 @@ fun test_set_config_success() {
             test_scenario::ctx(&mut scenario),
         );
 
-        let config = sui_payment_standard::create_payment_record_config(
+        let config = sui_payment_standard::create_registry_config(
             1000, // epoch_expiration_duration
+            false, // registry_managed_funds
         );
 
-        sui_payment_standard::set_receipt_config(
+        sui_payment_standard::set_registry_config(
             &mut registry,
             &cap,
             config,
@@ -925,12 +932,13 @@ fun test_set_config_unauthorized() {
             );
             test_utils::destroy(alice_registry);
 
-            let config = sui_payment_standard::create_payment_record_config(
+            let config = sui_payment_standard::create_registry_config(
                 1000, // epoch_expiration_duration
+                false, // registry_managed_funds
             );
 
             // ALICE tries to set config on BOB's registry with her cap - should fail
-            sui_payment_standard::set_receipt_config(
+            sui_payment_standard::set_registry_config(
                 &mut registry,
                 &alice_cap,
                 config,
@@ -1098,7 +1106,7 @@ fun test_empty_nonce_failure() {
             std::ascii::string(b""), // Empty nonce - should fail
             1000,
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -1138,7 +1146,7 @@ fun test_nonce_too_long_failure() {
             std::ascii::string(b"1234567890123456789012345678901234567"), // 37 characters - should fail
             1000,
             coin,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -1179,7 +1187,7 @@ fun test_valid_nonce_lengths() {
             std::ascii::string(b"1"), // 1 character - should work
             1000,
             coin1,
-            BOB,
+            std::option::some(BOB),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
@@ -1191,7 +1199,7 @@ fun test_valid_nonce_lengths() {
             std::ascii::string(b"123456789012345678901234567890123456"), // 36 characters - should work
             500,
             coin2,
-            CHARLIE,
+            std::option::some(CHARLIE),
             &clock,
             test_scenario::ctx(&mut scenario),
         );
