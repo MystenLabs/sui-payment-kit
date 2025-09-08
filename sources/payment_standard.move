@@ -134,7 +134,7 @@ public fun create_registry(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment<T>(
+public fun process_ephemeral_payment<T>(
     nonce: String,
     payment_amount: u64,
     coin: Coin<T>,
@@ -210,7 +210,6 @@ public fun process_payment_in_registry<T>(
         // Transfer the coin to the receiver.
         transfer::public_transfer(coin, actual_receiver);
     };
-    event::emit(receipt);
 
     registry.write_payment_record<T>(receipt, ctx);
 

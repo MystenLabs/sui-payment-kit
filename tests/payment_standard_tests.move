@@ -988,17 +988,17 @@ fun test_valid_nonce_lengths() {
     test_scenario::end(scenario);
 }
 
-/// Tests the standalone process_payment function without registry.
+/// Tests the standalone process_ephemeral_payment function without registry.
 #[test]
-fun test_process_payment_standalone() {
+fun test_process_ephemeral_payment_standalone() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
     let coin = create_test_coin(&mut scenario, 1500);
     let clock = create_test_clock(&mut scenario);
 
-    let _receipt = payment_standard::process_payment<SUI>(
-        std::ascii::string(b"standalone-payment"),
+    let _receipt = payment_standard::process_ephemeral_payment<SUI>(
+        std::ascii::string(b"ephemeral-payment"),
         1500,
         coin,
         BOB,
@@ -1011,16 +1011,16 @@ fun test_process_payment_standalone() {
     test_scenario::end(scenario);
 }
 
-/// Tests the standalone process_payment function with an invalid nonce.
+/// Tests the standalone process_ephemeral_payment function with an invalid nonce.
 #[test, expected_failure(abort_code = payment_standard::EInvalidNonce)]
-fun test_process_payment_standalone_invalid_nonce() {
+fun test_process_ephemeral_payment_standalone_invalid_nonce() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
 
-    let _receipt = payment_standard::process_payment<SUI>(
+    let _receipt = payment_standard::process_ephemeral_payment<SUI>(
         std::ascii::string(b""), // Empty nonce - should fail
         1000,
         coin,
