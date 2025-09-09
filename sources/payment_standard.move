@@ -8,10 +8,12 @@ use sui::coin::Coin;
 use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
+use sui::vec_map::{Self, VecMap};
+use sui_payment_standard::config_value::{Self, ConfigValue};
 
-const EPaymentAlreadyExists: u64 = 0;
 const EIncorrectAmount: u64 = 1;
 const EPaymentRecordDoesNotExist: u64 = 2;
+const EPaymentAlreadyExists: u64 = 3;
 const EPaymentRecordHasNotExpired: u64 = 3;
 const EUnauthorizedAdmin: u64 = 4;
 const ERegistryAlreadyExists: u64 = 5;
@@ -26,6 +28,9 @@ const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
 
 const DEFAULT_REGISTRY_NAME: vector<u8> = b"payment-registry";
 
+const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
+const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
+
 public struct Namespace has key {
     id: UID,
 }
@@ -33,6 +38,7 @@ public struct Namespace has key {
 public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
+    config: VecMap<String, ConfigValue>,
 }
 
 public struct RegistryAdminCap has key, store {
@@ -69,12 +75,6 @@ public struct BalanceKey<phantom T>() has copy, drop, store;
 /// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
 /// They are stored in a DynamicField within the registry, under their respective key structs.
 public struct RegistryConfigKey() has copy, drop, store;
-
-/// RegistryConfig holds configuration options for a PaymentRegistry.
-public struct RegistryConfig has copy, drop, store {
-    epoch_expiration_duration: u64,
-    registry_managed_funds: bool,
-}
 
 /// Initializes the module, creating and sharing the Namespace object.
 fun init(ctx: &mut TxContext) {
@@ -114,6 +114,7 @@ public fun create_registry(
         PaymentRegistry {
             id: uid,
             cap_id: object::id(&cap),
+            config: vec_map::empty(),
         },
         cap,
     )
@@ -181,10 +182,13 @@ public fun process_payment_in_registry<T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): PaymentReceipt {
-    let config = registry.registry_config();
+    let funds_managed_by_registry = registry
+        .config
+        .try_get(&REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string())
+        .is_some_and!(|val| (*val).as_bool());
 
     // Validate receiver requirements based on registry configuration BEFORE consuming it
-    if (config.registry_managed_funds) {
+    if (funds_managed_by_registry) {
         assert!(
             receiver.is_none() || receiver.is_some_and!(|r| r == registry.id.to_address()),
             ERegistryMustBeReceiver,
@@ -204,7 +208,7 @@ public fun process_payment_in_registry<T>(
         clock,
     );
 
-    if (config.registry_managed_funds) {
+    if (funds_managed_by_registry) {
         registry.collect_payment(coin);
     } else {
         // Transfer the coin to the receiver.
@@ -254,18 +258,20 @@ public fun delete_payment_record<T>(
 ) {
     assert!(df::exists_(&registry.id, payment_key), EPaymentRecordDoesNotExist);
 
-    let config = registry.registry_config();
+    let expiration_duration = registry
+        .config
+        .try_get(&EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string())
+        .map!(|val| val.as_u64())
+        .destroy_or!(DEFAULT_EPOCH_EXPIRATION_DURATION);
 
     let payment_record: &PaymentRecord = df::borrow(
         &registry.id,
         payment_key,
     );
 
-    let current_epoch = ctx.epoch();
-    let expiration_duration = config.epoch_expiration_duration;
     let expiration_epoch = payment_record.epoch_at_time_of_record + expiration_duration;
 
-    assert!(current_epoch >= expiration_epoch, EPaymentRecordHasNotExpired);
+    assert!(ctx.epoch() >= expiration_epoch, EPaymentRecordHasNotExpired);
 
     df::remove<_, PaymentRecord>(
         &mut registry.id,
@@ -291,45 +297,31 @@ public fun create_payment_key<T>(
     }
 }
 
-/// Creates a RegistryConfig instance.
-/// # Parameters
-/// * `epoch_expiration_duration` - Number of epochs after which a payment record expires
-/// * `registry_managed_funds` - Whether the registry should manage funds (collect payments into its balance)
-///
-/// # Returns
-/// A new RegistryConfig instance
-public fun create_registry_config(
-    epoch_expiration_duration: u64,
-    registry_managed_funds: bool,
-): RegistryConfig {
-    RegistryConfig {
-        epoch_expiration_duration,
-        registry_managed_funds,
-    }
-}
-
-/// Sets the RegistryConfig for the registry.
-/// # Parameters
-/// * `registry` - Payment registry to set the config for
-/// * `cap` - Admin capability for the registry
-/// * `registry_config` - New configuration to set
-/// # Aborts
-/// * If the caller does not have the admin capability for the registry
-public fun set_registry_config(
+/// Sets the `epoch_expiration_duration` for the configuration.
+public fun set_config_epoch_expiration_duration(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
-    registry_config: RegistryConfig,
+    epoch_expiration_duration: u64,
     _ctx: &mut TxContext,
 ) {
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
 
-    let key = RegistryConfigKey();
+    registry.upsert_config(
+        EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string(),
+        config_value::new_u64(epoch_expiration_duration),
+    );
+}
 
-    df::remove_if_exists<_, RegistryConfig>(&mut registry.id, key);
-    df::add(
-        &mut registry.id,
-        key,
-        registry_config,
+public fun set_config_registry_managed_funds(
+    registry: &mut PaymentRegistry,
+    cap: &RegistryAdminCap,
+    registry_managed_funds: bool,
+    _ctx: &mut TxContext,
+) {
+    assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+    registry.upsert_config(
+        REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string(),
+        config_value::new_bool(registry_managed_funds),
     );
 }
 
@@ -338,16 +330,6 @@ public fun set_registry_config(
 /// * `registry` - The PaymentRegistry to share
 public fun share(registry: PaymentRegistry) {
     transfer::share_object(registry);
-}
-
-/// Retrieves the RegistryConfig for the registry, or the default if none is set.
-fun registry_config(registry: &PaymentRegistry): RegistryConfig {
-    let key = RegistryConfigKey();
-    if (df::exists_(&registry.id, key)) {
-        *df::borrow<_, RegistryConfig>(&registry.id, key)
-    } else {
-        default_registry_config()
-    }
 }
 
 /// Validate the inputs & produce a receipt.
@@ -413,14 +395,6 @@ fun to_payment_record_key<T>(receipt: &PaymentReceipt): PaymentKey<T> {
     }
 }
 
-fun default_registry_config(): RegistryConfig {
-    RegistryConfig {
-        epoch_expiration_duration: DEFAULT_EPOCH_EXPIRATION_DURATION,
-        // By default, registries do not manage funds.
-        registry_managed_funds: false,
-    }
-}
-
 /// If the registry is configured to manage funds, collects a payment into the registry's balance.
 fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
     let key = BalanceKey<T>();
@@ -429,6 +403,14 @@ fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
     } else {
         df::add(&mut registry.id, key, coin.into_balance());
     }
+}
+
+fun upsert_config(registry: &mut PaymentRegistry, key: String, value: ConfigValue) {
+    if (registry.config.contains(&key)) {
+        registry.config.remove(&key);
+    };
+
+    registry.config.insert(key, value);
 }
 
 /// Checks if the provided admin capability is valid for the given registry.
