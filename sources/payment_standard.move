@@ -1,3 +1,6 @@
+// Copyright (c) Mysten Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 module sui_payment_standard::payment_standard;
 
 use std::ascii::String;
