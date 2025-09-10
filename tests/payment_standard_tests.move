@@ -49,13 +49,13 @@ fun test_create_registry() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     test_utils::destroy(registry);
@@ -71,13 +71,13 @@ fun test_successful_payment_exact_amount() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -88,7 +88,7 @@ fun test_successful_payment_exact_amount() {
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Payment completed successfully - nonce is now recorded
@@ -106,23 +106,23 @@ fun test_overpayment_failure() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, _cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1500); // More than expected
     let clock = create_test_clock(&mut scenario);
 
     let _receipt = registry.process_payment_in_registry<SUI>(
-        std::ascii::string(b"67890"), // salt
+        std::ascii::string(b"67890"), // nonce
         1000, // payment_amount - less than coin value
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -134,13 +134,13 @@ fun test_duplicate_payment_hash_failure() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
-    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let mut namespace = scenario.take_shared<payment_standard::Namespace>();
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing
@@ -152,7 +152,7 @@ fun test_duplicate_payment_hash_failure() {
     registry.set_registry_config(
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     let coin1 = create_test_coin(&mut scenario, 1000);
@@ -166,17 +166,17 @@ fun test_duplicate_payment_hash_failure() {
         coin1,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Second payment with identical parameters should fail (same hash)
     let _receipt2 = registry.process_payment_in_registry<SUI>(
-        std::ascii::string(b"12345"), // Same salt
+        std::ascii::string(b"12345"), // Same nonce
         1000, // Same payment_amount
         coin2,
         std::option::some(BOB), // Same receiver
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -206,7 +206,7 @@ fun test_insufficient_amount_failure() {
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -218,16 +218,16 @@ fun test_multiple_different_nonces() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
-    // Process multiple payments with different salts
+    // Process multiple payments with different nonce values
     let clock = create_test_clock(&mut scenario);
 
     let coin1 = create_test_coin(&mut scenario, 1000);
@@ -237,7 +237,7 @@ fun test_multiple_different_nonces() {
         coin1,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     let coin2 = create_test_coin(&mut scenario, 1500);
@@ -247,7 +247,7 @@ fun test_multiple_different_nonces() {
         coin2,
         std::option::some(CHARLIE),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     let coin3 = create_test_coin(&mut scenario, 500);
@@ -257,7 +257,7 @@ fun test_multiple_different_nonces() {
         coin3,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // All payments completed successfully with different nonces
@@ -275,13 +275,13 @@ fun test_zero_payment_amount() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -292,7 +292,7 @@ fun test_zero_payment_amount() {
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Payment with zero payment amount completed successfully
@@ -311,26 +311,26 @@ fun test_large_nonce_values() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
-    // Test with large salt value
+    // Test with large nonce value
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
 
     let _receipt = registry.process_payment_in_registry<SUI>(
-        std::ascii::string(b"18446744073709551615"), // Large salt
+        std::ascii::string(b"18446744073709551615"), // Large nonce
         1000,
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Payment with large nonce completed successfully
@@ -348,13 +348,13 @@ fun test_delete_expired_payment_record_success() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing with 0 epoch expiration
@@ -365,7 +365,7 @@ fun test_delete_expired_payment_record_success() {
     registry.set_registry_config(
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     let coin = create_test_coin(&mut scenario, 1000);
@@ -381,7 +381,7 @@ fun test_delete_expired_payment_record_success() {
         coin,
         std::option::some(receiver),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Create payment record key to delete the record
@@ -393,7 +393,7 @@ fun test_delete_expired_payment_record_success() {
 
     registry.delete_payment_record<SUI>(
         payment_record_key,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(clock);
     test_utils::destroy(registry);
@@ -409,13 +409,13 @@ fun test_delete_nonexistent_payment_record() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing
@@ -426,7 +426,7 @@ fun test_delete_nonexistent_payment_record() {
     registry.set_registry_config(
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Create a fake payment record key for a non-existent record
@@ -438,7 +438,7 @@ fun test_delete_nonexistent_payment_record() {
 
     registry.delete_payment_record<SUI>(
         fake_payment_record_key,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -450,13 +450,13 @@ fun test_delete_payment_record_not_expired() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing with large epoch expiration
@@ -468,7 +468,7 @@ fun test_delete_payment_record_not_expired() {
         &mut registry,
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -483,7 +483,7 @@ fun test_delete_payment_record_not_expired() {
         coin,
         std::option::some(receiver),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Create payment record key to delete the record
@@ -495,7 +495,7 @@ fun test_delete_payment_record_not_expired() {
 
     registry.delete_payment_record<SUI>(
         payment_record_key,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -507,13 +507,13 @@ fun test_delete_payment_record_immediate_expiration() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing with immediate expiration
@@ -524,7 +524,7 @@ fun test_delete_payment_record_immediate_expiration() {
     registry.set_registry_config(
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -539,7 +539,7 @@ fun test_delete_payment_record_immediate_expiration() {
         coin,
         std::option::some(receiver),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Create payment record key to delete the record
@@ -551,7 +551,7 @@ fun test_delete_payment_record_immediate_expiration() {
 
     registry.delete_payment_record<SUI>(
         payment_record_key,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     test_utils::destroy(clock);
@@ -568,13 +568,13 @@ fun test_30_epoch_expiration_duration() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     // Set config to enable payment record writing with 30 epoch expiration
@@ -585,7 +585,7 @@ fun test_30_epoch_expiration_duration() {
     registry.set_registry_config(
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -600,7 +600,7 @@ fun test_30_epoch_expiration_duration() {
         coin,
         std::option::some(receiver),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Create payment record key to delete the record
@@ -612,7 +612,7 @@ fun test_30_epoch_expiration_duration() {
 
     registry.delete_payment_record<SUI>(
         payment_record_key,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -624,7 +624,7 @@ fun test_valid_registry_names() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -632,21 +632,21 @@ fun test_valid_registry_names() {
     // Test various valid SuiNS-compliant names
     let (registry1, cap1) = namespace.create_registry(
         std::ascii::string(b"test123"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(registry1);
     test_utils::destroy(cap1);
 
     let (registry2, cap2) = namespace.create_registry(
         std::ascii::string(b"abc"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(registry2);
     test_utils::destroy(cap2);
 
     let (registry3, cap3) = namespace.create_registry(
         std::ascii::string(b"test-registry-123"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(registry3);
     test_utils::destroy(cap3);
@@ -662,7 +662,7 @@ fun test_invalid_registry_name_special_chars() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -670,7 +670,7 @@ fun test_invalid_registry_name_special_chars() {
     // Should fail - contains underscore (not allowed in SuiNS)
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"test_registry"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -682,7 +682,7 @@ fun test_invalid_registry_name_too_long() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -690,7 +690,7 @@ fun test_invalid_registry_name_too_long() {
     // Should fail - 64 characters (exceeds 63 character SuiNS limit)
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"1234567890123456789012345678901234567890123456789012345678901234"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -702,7 +702,7 @@ fun test_invalid_registry_name_empty() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -710,7 +710,7 @@ fun test_invalid_registry_name_empty() {
     // Should fail - too short (less than 3 characters)
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"ab"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -722,13 +722,13 @@ fun test_set_config_success() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     let config = payment_standard::create_registry_config(
@@ -740,7 +740,7 @@ fun test_set_config_success() {
         &mut registry,
         &cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     test_utils::destroy(registry);
@@ -756,13 +756,13 @@ fun test_set_config_unauthorized() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(BOB);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, _bob_cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
 
     test_scenario::return_shared(namespace);
@@ -773,7 +773,7 @@ fun test_set_config_unauthorized() {
     );
     let (alice_registry, alice_cap) = namespace.create_registry(
         std::ascii::string(b"aliceregistry"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(alice_registry);
 
@@ -787,7 +787,7 @@ fun test_set_config_unauthorized() {
         &mut registry,
         &alice_cap,
         config,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -799,7 +799,7 @@ fun test_invalid_registry_name_starts_with_hyphen() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -807,7 +807,7 @@ fun test_invalid_registry_name_starts_with_hyphen() {
     // Should fail - starts with hyphen
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"-testregistry"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -819,7 +819,7 @@ fun test_invalid_registry_name_ends_with_hyphen() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -827,7 +827,7 @@ fun test_invalid_registry_name_ends_with_hyphen() {
     // Should fail - ends with hyphen
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"testregistry-"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -839,22 +839,22 @@ fun test_valid_registry_name_with_hyphens() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
 
     // Valid names with hyphens in the middle
     let (registry1, cap1) = namespace.create_registry(
-        std::ascii::string(b"my-registry"),
-        test_scenario::ctx(&mut scenario),
+        b"my-registry".to_ascii_string(),
+        scenario.ctx(),
     );
     test_utils::destroy(registry1);
     test_utils::destroy(cap1);
 
     let (registry2, cap2) = namespace.create_registry(
         std::ascii::string(b"test-payment-system"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
     test_utils::destroy(registry2);
     test_utils::destroy(cap2);
@@ -870,7 +870,7 @@ fun test_invalid_registry_name_uppercase() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
@@ -878,7 +878,7 @@ fun test_invalid_registry_name_uppercase() {
     // Should fail - contains uppercase letters
     let (_registry, _cap) = namespace.create_registry(
         std::ascii::string(b"MyRegistry"),
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -890,13 +890,13 @@ fun test_empty_nonce_failure() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, _cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -907,7 +907,7 @@ fun test_empty_nonce_failure() {
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -919,13 +919,13 @@ fun test_nonce_too_long_failure() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, _cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
     let clock = create_test_clock(&mut scenario);
@@ -936,7 +936,7 @@ fun test_nonce_too_long_failure() {
         coin,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
@@ -948,13 +948,13 @@ fun test_valid_nonce_lengths() {
     let mut scenario = setup_test_scenario();
 
     scenario.next_tx(ALICE);
-    payment_standard::init_for_testing(test_scenario::ctx(&mut scenario));
+    payment_standard::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
     let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
     let (mut registry, cap) = namespace.create_registry(
-        std::ascii::string(b"testregistry"),
-        test_scenario::ctx(&mut scenario),
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
     );
     let clock = create_test_clock(&mut scenario);
 
@@ -966,7 +966,7 @@ fun test_valid_nonce_lengths() {
         coin1,
         std::option::some(BOB),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     // Test maximum length (36 characters)
@@ -977,7 +977,7 @@ fun test_valid_nonce_lengths() {
         coin2,
         std::option::some(CHARLIE),
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     test_utils::destroy(clock);
@@ -1003,7 +1003,7 @@ fun test_process_ephemeral_payment_standalone() {
         coin,
         BOB,
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     test_utils::destroy(clock);
@@ -1026,7 +1026,7 @@ fun test_process_ephemeral_payment_standalone_invalid_nonce() {
         coin,
         BOB,
         &clock,
-        test_scenario::ctx(&mut scenario),
+        scenario.ctx(),
     );
 
     abort
