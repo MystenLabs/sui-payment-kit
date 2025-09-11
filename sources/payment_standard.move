@@ -14,9 +14,9 @@ use sui::event;
 use sui::vec_map::{Self, VecMap};
 use sui_payment_standard::registry_config_value::{Self, RegistryConfigValue};
 
+const EPaymentAlreadyExists: u64 = 0;
 const EIncorrectAmount: u64 = 1;
 const EPaymentRecordDoesNotExist: u64 = 2;
-const EPaymentAlreadyExists: u64 = 3;
 const EPaymentRecordHasNotExpired: u64 = 3;
 const EUnauthorizedAdmin: u64 = 4;
 const ERegistryAlreadyExists: u64 = 5;
@@ -34,21 +34,27 @@ const DEFAULT_REGISTRY_NAME: vector<u8> = b"payment-registry";
 const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
 const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
 
+/// Representation the higher order namespace object that contains all payment registries.
+/// There should only be one instance of this object, created at module initialization.
 public struct Namespace has key {
     id: UID,
 }
 
+/// Representation of a payment registry, which can be used to track payments and their receipts.
+/// Each registry has a unique ID, an admin capability, and a set of configurations.
 public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
     config: VecMap<String, RegistryConfigValue>,
 }
 
+/// Admin capability for a payment registry, allowing management of the registry and its configurations.
 public struct RegistryAdminCap has key, store {
     id: UID,
     registry_id: ID,
 }
 
+/// Receipt emitted for each processed payment, containing payment details.
 public struct PaymentReceipt has copy, drop, store {
     payment_type: PaymentType,
     nonce: String,
@@ -58,21 +64,27 @@ public struct PaymentReceipt has copy, drop, store {
     timestamp_ms: u64,
 }
 
+/// Enum representing the type of payment: Ephemeral (one-time) or Registry (tracked in a registry).
 public enum PaymentType has copy, drop, store {
     Ephemeral,
     Registry(ID),
 }
 
+/// Key for storing/retrieving PaymentRecords in a registry, derived from payment parameters.
+/// This struct is generic over the coin type to ensure uniqueness per coin type.
 public struct PaymentKey<phantom T> has copy, drop, store {
     nonce: String,
     payment_amount: u64,
     receiver: address,
 }
 
+/// Record of a processed payment, stored in a registry's dynamic field.
+/// Contains the epoch at which the payment was recorded, used for expiration checks.
 public struct PaymentRecord has copy, drop, store {
     epoch_at_time_of_record: u64,
 }
 
+/// Key for storing/retrieving the balance of a specific coin type in a registry.
 public struct BalanceKey<phantom T>() has copy, drop, store;
 
 /// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
@@ -164,11 +176,12 @@ public fun process_ephemeral_payment<T>(
 /// Processes a payment via a payment registry, writing a receipt to the registry.
 ///
 /// # Parameters
+/// * `registry` - Payment registry to write the receipt to
 /// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
-/// * `receiver` - (Mutable) Address of the payment receiver
-/// * `registry` - Payment registry to write the receipt to
+/// * `receiver` - Optional address of the payment receiver. If the registry is configured to manage funds, this must be either `None` or the registry's own address.
+/// * `clock` - Reference to the Clock object
 ///
 /// # Aborts
 /// * If a receipt with the same payment parameters already exists in the registry
@@ -300,7 +313,17 @@ public fun create_payment_key<T>(
     }
 }
 
-/// Sets the `epoch_expiration_duration` for the configuration.
+/// Sets the epoch expiration duration configuration for the registry.
+/// If set, payment records will expire after the specified number of epochs.
+/// If not set, payment records will never expire.
+///
+/// # Parameters
+/// * `registry` - The PaymentRegistry to configure
+/// * `cap` - Admin capability for the registry
+/// * `epoch_expiration_duration` - Number of epochs after which payment records expire
+///
+/// # Aborts
+/// * If the caller does not have the admin capability for the registry
 public fun set_config_epoch_expiration_duration(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
@@ -315,6 +338,16 @@ public fun set_config_epoch_expiration_duration(
     );
 }
 
+/// Sets whether the registry should manage funds itself.
+/// If true, payments processed via the registry will be collected into the registry's balance.
+/// If false, payments will be transferred directly to the specified receiver.
+/// # Parameters
+/// * `registry` - The PaymentRegistry to configure
+/// * `cap` - Admin capability for the registry
+/// * `registry_managed_funds` - Boolean indicating whether the registry should manage funds
+///
+/// # Aborts
+/// * If the caller does not have the admin capability for the registry
 public fun set_config_registry_managed_funds(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
@@ -329,13 +362,15 @@ public fun set_config_registry_managed_funds(
 }
 
 /// Enforce that a registry will always be shared.
+///
 /// # Parameters
 /// * `registry` - The PaymentRegistry to share
 public fun share(registry: PaymentRegistry) {
     transfer::share_object(registry);
 }
 
-/// Validate the inputs & produce a receipt.
+/// Internal function to create a payment receipt and emit the corresponding event.
+/// Validates the payment amount and nonce.
 fun internal_create_receipt<T>(
     payment_type: PaymentType,
     coin: &Coin<T>,
@@ -368,6 +403,7 @@ fun internal_create_receipt<T>(
 }
 
 /// Writes a payment record to a dynamic field in the registry.
+/// Aborts if a record with the same payment parameters already exists.
 fun write_payment_record<T>(
     registry: &mut PaymentRegistry,
     receipt: PaymentReceipt,
@@ -390,6 +426,7 @@ fun write_payment_record<T>(
 }
 
 /// Converts a PaymentReceipt into a PaymentKey for storage/retrieval of the corresponding PaymentRecord.
+/// The coin type is used as a phantom type parameter to ensure uniqueness per coin type.
 fun to_payment_record_key<T>(receipt: &PaymentReceipt): PaymentKey<T> {
     PaymentKey {
         nonce: receipt.nonce,
@@ -399,6 +436,7 @@ fun to_payment_record_key<T>(receipt: &PaymentReceipt): PaymentKey<T> {
 }
 
 /// If the registry is configured to manage funds, collects a payment into the registry's balance.
+/// If no balance exists for the coin type, a new balance is created.
 fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
     let key = BalanceKey<T>();
     if (df::exists_(&registry.id, key)) {
@@ -408,6 +446,8 @@ fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
     }
 }
 
+/// Inserts or updates a configuration in the registry's config map.
+/// If a configuration with the same key already exists, it is replaced.
 fun upsert_config(registry: &mut PaymentRegistry, key: String, value: RegistryConfigValue) {
     if (registry.config.contains(&key)) {
         registry.config.remove(&key);
@@ -421,7 +461,10 @@ fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
     cap.registry_id == object::id(registry)
 }
 
-/// Validates that a registry name conforms to SuiNS standards:
+/// Validates that a registry name conforms to SuiNS standards
+/// - Length between 3 and 63 characters
+/// - Contains only lowercase letters, digits, and hyphens
+/// - Does not start or end with a hyphen
 fun validate_registry_name(name: String) {
     assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
 
@@ -447,6 +490,7 @@ fun validate_registry_name(name: String) {
 }
 
 /// Validates that a nonce is non-empty and does not exceed 36 characters.
+/// This helps prevent excessively long nonces that could lead to storage issues.
 fun validate_nonce(nonce: &String) {
     assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
 }

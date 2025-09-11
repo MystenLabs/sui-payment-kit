@@ -144,14 +144,14 @@ fun test_duplicate_payment_hash_failure() {
     );
 
     // Set config to enable payment record writing
-    let config = payment_standard::create_registry_config(
-        0, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-
-    registry.set_registry_config(
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        0, // epoch_expiration_duration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
 
@@ -358,13 +358,14 @@ fun test_delete_expired_payment_record_success() {
     );
 
     // Set config to enable payment record writing with 0 epoch expiration
-    let config = payment_standard::create_registry_config(
-        0, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-    registry.set_registry_config(
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        0, // epoch_expiration_duration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
 
@@ -419,13 +420,14 @@ fun test_delete_nonexistent_payment_record() {
     );
 
     // Set config to enable payment record writing
-    let config = payment_standard::create_registry_config(
-        1000, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-    registry.set_registry_config(
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        1000, // epoch_expiration_duration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
 
@@ -460,14 +462,14 @@ fun test_delete_payment_record_not_expired() {
     );
 
     // Set config to enable payment record writing with large epoch expiration
-    let config = payment_standard::create_registry_config(
-        10000, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-    payment_standard::set_registry_config(
-        &mut registry,
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        10000, // epoch_expiration_duration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
@@ -517,13 +519,14 @@ fun test_delete_payment_record_immediate_expiration() {
     );
 
     // Set config to enable payment record writing with immediate expiration
-    let config = payment_standard::create_registry_config(
-        0, // epoch_expiration_duration - 0 means immediate expiration
-        false, // registry_managed_funds
-    );
-    registry.set_registry_config(
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        0, // epoch_expiration_duration - 0 means immediate expiration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
@@ -578,13 +581,14 @@ fun test_30_epoch_expiration_duration() {
     );
 
     // Set config to enable payment record writing with 30 epoch expiration
-    let config = payment_standard::create_registry_config(
-        30, // epoch_expiration_duration (30 epochs)
-        false, // registry_managed_funds
-    );
-    registry.set_registry_config(
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        30, // epoch_expiration_duration (30 epochs)
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
     let coin = create_test_coin(&mut scenario, 1000);
@@ -731,15 +735,14 @@ fun test_set_config_success() {
         scenario.ctx(),
     );
 
-    let config = payment_standard::create_registry_config(
-        1000, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-
-    payment_standard::set_registry_config(
-        &mut registry,
+    registry.set_config_epoch_expiration_duration(
         &cap,
-        config,
+        1000, // epoch_expiration_duration
+        scenario.ctx(),
+    );
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false, // registry_managed_funds
         scenario.ctx(),
     );
 
@@ -777,16 +780,10 @@ fun test_set_config_unauthorized() {
     );
     test_utils::destroy(alice_registry);
 
-    let config = payment_standard::create_registry_config(
-        1000, // epoch_expiration_duration
-        false, // registry_managed_funds
-    );
-
     // ALICE tries to set config on BOB's registry with her cap - should fail
-    payment_standard::set_registry_config(
-        &mut registry,
+    registry.set_config_epoch_expiration_duration(
         &alice_cap,
-        config,
+        1000, // epoch_expiration_duration
         scenario.ctx(),
     );
 
@@ -1028,6 +1025,295 @@ fun test_process_ephemeral_payment_standalone_invalid_nonce() {
         &clock,
         scenario.ctx(),
     );
+
+    abort
+}
+
+
+/// Tests processing a payment with registry_managed_funds enabled and no receiver specified.
+#[test]
+fun test_registry_managed_funds_no_receiver() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Enable registry managed funds
+    registry.set_config_registry_managed_funds(
+        &cap,
+        true,
+        scenario.ctx(),
+    );
+
+    let coin = create_test_coin(&mut scenario, 1000);
+    let clock = create_test_clock(&mut scenario);
+
+    // Process payment with no receiver (should default to registry)
+    let _receipt = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"12345"),
+        1000,
+        coin,
+        std::option::none(), // No receiver specified
+        &clock,
+        scenario.ctx(),
+    );
+
+    // Withdraw the funds from the registry
+    let withdrawn_coin = registry.withdraw_from_registry<SUI>(&cap, scenario.ctx());
+    assert!(withdrawn_coin.value() == 1000, 0);
+
+    test_utils::destroy(withdrawn_coin);
+    test_utils::destroy(clock);
+    test_utils::destroy(registry);
+    test_utils::destroy(cap);
+    test_scenario::return_shared(namespace);
+
+    test_scenario::end(scenario);
+}
+
+/// Tests processing a payment with registry_managed_funds enabled and registry as receiver.
+#[test]
+fun test_registry_managed_funds_registry_as_receiver() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Enable registry managed funds
+    registry.set_config_registry_managed_funds(
+        &cap,
+        true,
+        scenario.ctx(),
+    );
+
+    let registry_address = object::id_address(&registry);
+    let coin = create_test_coin(&mut scenario, 2000);
+    let clock = create_test_clock(&mut scenario);
+
+    // Process payment with registry as receiver
+    let _receipt = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"67890"),
+        2000,
+        coin,
+        std::option::some(registry_address), // Registry as receiver
+        &clock,
+        scenario.ctx(),
+    );
+
+    // Withdraw the funds from the registry
+    let withdrawn_coin = registry.withdraw_from_registry<SUI>(&cap, scenario.ctx());
+    assert!(withdrawn_coin.value() == 2000, 0);
+
+    test_utils::destroy(withdrawn_coin);
+    test_utils::destroy(clock);
+    test_utils::destroy(registry);
+    test_utils::destroy(cap);
+    test_scenario::return_shared(namespace);
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that providing a different receiver fails when registry_managed_funds is enabled.
+#[test, expected_failure(abort_code = payment_standard::ERegistryMustBeReceiver)]
+fun test_registry_managed_funds_invalid_receiver() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Enable registry managed funds
+    registry.set_config_registry_managed_funds(
+        &cap,
+        true,
+        scenario.ctx(),
+    );
+
+    let coin = create_test_coin(&mut scenario, 1000);
+    let clock = create_test_clock(&mut scenario);
+
+    // Process payment with different receiver (should fail)
+    let _receipt = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"12345"),
+        1000,
+        coin,
+        std::option::some(BOB), // Different receiver - should fail
+        &clock,
+        scenario.ctx(),
+    );
+
+    abort
+}
+
+/// Tests that receiver must be provided when registry_managed_funds is disabled.
+#[test, expected_failure(abort_code = payment_standard::EReceiverMustBeProvided)]
+fun test_receiver_required_when_funds_not_managed() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Explicitly disable registry managed funds
+    registry.set_config_registry_managed_funds(
+        &cap,
+        false,
+        scenario.ctx(),
+    );
+
+    let coin = create_test_coin(&mut scenario, 1000);
+    let clock = create_test_clock(&mut scenario);
+
+    // Process payment with no receiver (should fail when funds not managed)
+    let _receipt = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"12345"),
+        1000,
+        coin,
+        std::option::none(), // No receiver - should fail
+        &clock,
+        scenario.ctx(),
+    );
+
+    abort
+}
+
+/// Tests processing multiple payments and withdrawing accumulated funds.
+#[test]
+fun test_registry_managed_funds_multiple_payments() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (mut registry, cap) = namespace.create_registry(
+        b"testregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Enable registry managed funds
+    registry.set_config_registry_managed_funds(
+        &cap,
+        true,
+        scenario.ctx(),
+    );
+
+    let clock = create_test_clock(&mut scenario);
+
+    // Process multiple payments
+    let coin1 = create_test_coin(&mut scenario, 1000);
+    let _receipt1 = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"payment1"),
+        1000,
+        coin1,
+        std::option::none(),
+        &clock,
+        scenario.ctx(),
+    );
+
+    let coin2 = create_test_coin(&mut scenario, 2000);
+    let _receipt2 = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"payment2"),
+        2000,
+        coin2,
+        std::option::none(),
+        &clock,
+        scenario.ctx(),
+    );
+
+    let coin3 = create_test_coin(&mut scenario, 1500);
+    let _receipt3 = registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"payment3"),
+        1500,
+        coin3,
+        std::option::none(),
+        &clock,
+        scenario.ctx(),
+    );
+
+    // Withdraw all accumulated funds
+    let withdrawn_coin = registry.withdraw_from_registry<SUI>(&cap, scenario.ctx());
+    assert!(withdrawn_coin.value() == 4500, 0); // 1000 + 2000 + 1500
+
+    test_utils::destroy(withdrawn_coin);
+    test_utils::destroy(clock);
+    test_utils::destroy(registry);
+    test_utils::destroy(cap);
+    test_scenario::return_shared(namespace);
+
+    test_scenario::end(scenario);
+}
+
+/// Tests that withdrawing from registry requires admin capability.
+#[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
+fun test_registry_withdraw_unauthorized() {
+    let mut scenario = setup_test_scenario();
+
+    scenario.next_tx(ALICE);
+    payment_standard::init_for_testing(scenario.ctx());
+
+    scenario.next_tx(ALICE);
+    let mut namespace = test_scenario::take_shared<payment_standard::Namespace>(&scenario);
+    let (_alice_registry, alice_cap) = namespace.create_registry(
+        b"aliceregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+    
+    scenario.next_tx(BOB);
+    let (mut bob_registry, _bob_cap) = namespace.create_registry(
+        b"bobregistry".to_ascii_string(),
+        scenario.ctx(),
+    );
+
+    // Enable registry managed funds on Bob's registry
+    bob_registry.set_config_registry_managed_funds(
+        &_bob_cap,
+        true,
+        scenario.ctx(),
+    );
+
+    let coin = create_test_coin(&mut scenario, 1000);
+    let clock = create_test_clock(&mut scenario);
+
+    // Process payment to Bob's registry
+    let _receipt = bob_registry.process_payment_in_registry<SUI>(
+        std::ascii::string(b"12345"),
+        1000,
+        coin,
+        std::option::none(),
+        &clock,
+        scenario.ctx(),
+    );
+
+    // Try to withdraw from Bob's registry using Alice's cap (should fail)
+    let _withdrawn = bob_registry.withdraw_from_registry<SUI>(&alice_cap, scenario.ctx());
 
     abort
 }
