@@ -1,230 +1,183 @@
 # Sui Payment Standard
 
-A secure payment processing system built on the Sui blockchain that provides reliable payment verification and receipt management.
+A robust, open-source payment processing standard for the Sui blockchain that provides secure payment verification, receipt management, and duplicate prevention.
 
-## Technical Overview
+## Overview
 
-Sui Payment Standard is a Move smart contract that enables secure, verifiable payments on the Sui network with built-in duplicate prevention and optional receipt persistence. The system is designed around payment registries that can be configured with custom policies for receipt management and expiration.
-
-### PaymentRegistry
-
-- **Purpose**: Container for payment receipts with configurable policies
-- **Features**:
-  - Unique registry identification via derived objects
-  - Admin-controlled configuration through `RegistryAdminCap`
-  - Dynamic field storage for receipts and configurations
-
-### RegistryAdminCap
-
-- **Purpose**: Administrative capability object for registry management
-- **Permissions**:
-  - Configure receipt policies
-  - Set expiration rules
-
-### PaymentReceipt
-
-- **Purpose**: Immutable record of completed payments
-- **Fields**:
-  - `payment_id`: Unique identifier for the payment
-  - `payment_amount`: Amount transferred in the payment
-  - `receiver`: Recipient address
-  - `coin_type`: Type of coin used (e.g., SUI)
-  - `timestamp_ms`: Payment timestamp
-
-### Configs
-
-**Purpose**: Configurable policy owned by the Registry. Each configuration is independently stored in a Dynamic Field for greater modularity and upgradability. This provides the ability to add additional configurations without breaking existing Registries and their previously set configurations.
-
-#### Receipt Config
-
-- `write_receipts`: Whether to persist receipts in registry
-- `receipt_expiration_duration_ms`: Optional expiration time for receipts. `None` implies receipts never expire.
+The Sui Payment Standard is a Move smart contract framework that enables developers to integrate secure, verifiable payments into their Sui applications. It provides a flexible architecture for payment processing with optional receipt persistence, configurable expiration policies, and built-in duplicate prevention.
 
 ### Key Features
 
-#### Duplicate Prevention
+- **🔒 Secure Payment Processing**: Built-in duplicate prevention and exact amount verification
+- **📝 Flexible Receipt Management**: Optional receipt persistence with configurable expiration
+- **⚡ Event-Driven Architecture**: All payments emit events for off-chain tracking
+- **🎛️ Admin Controls**: Capability-based access control for registry management
+- **🧩 Modular Design**: Extensible configuration system for future enhancements
+- **💰 Multi-Coin Support**: Generic implementation supports any Sui coin type
 
-- Uses composite keys (`PaymentKey`) derived from payment parameters
-- Prevents duplicate payments with identical: `payment_id`, `amount`, `coin_type`, and `receiver`
+## How It Works
 
-#### Exact Amount Verification
+### Architecture
 
-- Enforces exact payment amounts to prevent overpayment/underpayment
-- Validates coin value matches expected payment amount
+The Sui Payment Standard consists of three main components:
 
-#### Derived Address Registries
+1. **Payment Processing Core**: Handles coin transfers and validation
+2. **Registry System**: Optional persistent storage for payment receipts
+3. **Configuration Layer**: Dynamic, upgradeable configuration management
 
-- Registries leverage Derived Addresses, allowing for easy lockup via a string based identifier
+### Payment Flows
 
-#### Configurable Receipt Management
+#### 1. Simple Payment (Event-Only)
 
-- Optional receipt persistence in registries
-- Configurable expiration policies
-- Admin-controlled settings per registry
-
-#### Receipt Expiration and Cleanup
-
-- Time-based receipt expiration
-- Manual cleanup of expired receipts
-- Storage optimization through receipt removal
-
-### Payment Processing Flow
-
-1. **Registry Creation** (Optional)
-
-   ```move
-   create_registry(&mut namespace, name, ctx) -> (PaymentRegistry, RegistryAdminCap)
-   ```
-
-2. **Configuration** (Optional)
-
-   ```move
-   registry.set_receipt_config(&cap, config, ctx)
-   ```
-
-3. **Payment Processing**
-
-   - **Simple Payment**: `process_payment()` - emits event only
-   - **Registry Payment**: `process_payment_in_registry()` - optionally persists receipt
-
-4. **Receipt Management**
-   ```move
-   close_expired_receipt(&mut registry, key, ctx)
-   ```
-
-### Error Codes
-
-| Code | Constant                                 | Description                               |
-| ---- | ---------------------------------------- | ----------------------------------------- |
-| 0    | `EPaymentAlreadyExists`                  | Duplicate payment attempt                 |
-| 1    | `EIncorrectAmount`                       | Coin value doesn't match expected amount  |
-| 2    | `EPaymentRecordDoesNotExist`             | Receipt not found for cleanup             |
-| 3    | `EPaymentRecordHasNotExpired`            | Attempting to close non-expired receipt   |
-| 4    | `EUnauthorizedAdmin`                     | Invalid admin capability                  |
-| 5    | `ERegistryAlreadyExists`                 | Registry name collision                   |
-| 6    | `ERegistryNameLengthIsNotAllowed`        | Registry name is too long                 |
-| 7    | `ERegistryNameContainsInvalidCharacters` | Registry name contains invalid characters |
-| 8    | `EInvalidNonce`                          | Invalid nonce was provided                |
-
-## Usage
-
-### Prerequisites
-
-- Sui CLI installed and configured
-- Access to Sui testnet or mainnet
-- Move compiler available
-
-### Building the Contract
-
-```bash
-sui move build
-```
-
-### Testing
-
-```bash
-sui move test
-```
-
-The test suite covers:
-
-- Basic payment processing
-- Duplicate prevention
-- Amount validation
-- Receipt expiration
-- Admin authorization
-- Error conditions
-
-### Deployment
-
-1. **Deploy the contract**:
-
-   ```bash
-   sui client publish --gas-budget 100000000
-   ```
-
-2. **Note the Package ID** from the deployment output for integration
-
-### Integration Examples
-
-#### Simple Payment (Event-Only)
+For applications that only need payment events without record persistence:
 
 ```move
-// Process payment without registry
-sui_payment_standard::process_payment<SUI>(
-    ascii::string(b"payment_123"),  // payment_id
-    1000,                           // amount in MIST
-    coin,                           // Coin<SUI> object
-    @0xrecipient,                   // recipient address
+use sui_payment_standard::payment_standard;
+
+// Process a simple payment
+let receipt = payment_standard::process_ephemeral_payment<SUI>(
+    b"order_123".to_ascii_string(),   // unique payment ID (nonce)
+    1000000,                          // amount in MIST (1 SUI = 1B MIST)
+    coin,                             // Coin<SUI> object
+    @0xrecipient,                     // recipient address
+    &clock,                           // Clock object for timestamps
     &mut ctx
 );
 ```
 
-#### Registry-Based Payment
+#### 2. Registry-Based Payment
+
+For applications requiring payment record storage:
 
 ```move
-// 1. Create registry (one-time setup)
-let (mut registry, admin_cap) = sui_payment_standard::create_registry(
+// One-time setup: Create a registry
+let (mut registry, admin_cap) = payment_standard::create_registry(
     &mut namespace,
-    ascii::string(b"my_store"),
+    b"my_marketplace".to_ascii_string(),
     &mut ctx
 );
 
-// 2. Configure receipt policy (optional)
-let config = sui_payment_standard::create_receipt_config(
-    true,                    // write receipts
-    option::some(86400000)   // 24-hour expiration
-);
-sui_payment_standard::set_receipt_config(&mut registry, &admin_cap, config, &mut ctx);
-
-// 3. Process payments
-let receipt = sui_payment_standard::process_payment_in_registry<SUI>(
-    ascii::string(b"order_456"),
-    2500,
-    coin,
-    @0xbuyer,
+// Configure registry policies (optional)
+// Set epoch expiration duration (e.g., 30 epochs)
+payment_standard::set_config_epoch_expiration_duration(
     &mut registry,
+    &admin_cap,
+    30,  // receipts expire after 30 epochs
+    &mut ctx
+);
+
+// Enable registry-managed funds (optional)
+payment_standard::set_config_registry_managed_funds(
+    &mut registry,
+    &admin_cap,
+    true,  // registry holds funds instead of direct transfer
+    &mut ctx
+);
+
+// Process payments through the registry
+let receipt = payment_standard::process_payment_in_registry<SUI>(
+    &mut registry,
+    b"order_456".to_ascii_string(),   // unique payment ID (nonce)
+    2500000,                          // amount in MIST
+    coin,                             // Coin<SUI> object
+    option::some(@0xrecipient),       // optional receiver (None if registry-managed)
+    &clock,                           // Clock object for timestamps
     &mut ctx
 );
 ```
 
-#### Receipt Cleanup
+### Duplicate Prevention
+
+The standard prevents duplicate payments using a composite key derived from:
+
+- Payment ID (nonce)
+- Amount
+- Coin type
+- Receiver address
+
+This ensures the same payment cannot be processed twice.
+
+### Receipt Management
+
+Receipt expiration can be configured in two different ways:
+
+1. **No Persistence**: Events only, no storage overhead
+2. **Auto-Expiring**: Receipts expire after a configured number of epochs (default is 30 epochs)
+
+Clean up expired receipts to optimize storage:
 
 ```move
-// Clean up expired receipts
-let payment_key = sui_payment_standard::create_payment_key(
-    ascii::string(b"order_456"),
-    2500,
-    ascii::string(b"0x2::sui::SUI"),
-    @0xbuyer
+// Create a payment key for the receipt you want to delete
+let payment_key = payment_standard::create_payment_key<SUI>(
+    b"order_456".to_ascii_string(),   // nonce
+    2500000,                          // payment amount
+    @0xrecipient                      // receiver address
 );
 
-sui_payment_standard::close_expired_receipt(
+// Delete the expired payment record
+payment_standard::delete_payment_record<SUI>(
     &mut registry,
     payment_key,
     &mut ctx
 );
 ```
 
-### Configuration Options
+### Fund Management
 
-#### Receipt Policies
+For registries configured to manage funds, administrators can withdraw collected payments:
 
-- **Disabled**: `create_receipt_config(false, option::none())`
-  - No receipt persistence, events only
-- **Persistent**: `create_receipt_config(true, option::none())`
-  - Permanent receipt storage, manual cleanup only
-- **Expiring**: `create_receipt_config(true, option::some(duration_ms))`
-  - Automatic expiration after specified time
+```move
+// Withdraw all SUI funds from the registry
+let withdrawn_coins = payment_standard::withdraw_from_registry<SUI>(
+    &mut registry,
+    &admin_cap,
+    &mut ctx
+);
 
-### Security Considerations
+// Transfer to desired address or use as needed
+transfer::public_transfer(withdrawn_coins, @0xadmin_wallet);
+```
 
-- **Admin Capabilities**: Store `RegistryAdminCap` securely
-- **Payment Validation**: Always verify payment amounts match expectations
-- **Unique Payment IDs**: Use truly unique identifiers to prevent conflicts
-- **Gas Management**: Consider gas costs for receipt storage and cleanup
-- **Access Control**: Registry admin capabilities provide full configuration control
+## API Reference
 
-### License
+### Core Functions
 
-[License information to be added]
+| Function                                 | Description                                  |
+| ---------------------------------------- | -------------------------------------------- |
+| `process_ephemeral_payment<T>()`         | Process a simple payment with event emission |
+| `process_payment_in_registry<T>()`       | Process payment through a registry           |
+| `create_registry()`                      | Create a new payment registry                |
+| `set_config_epoch_expiration_duration()` | Set receipt expiration in epochs             |
+| `set_config_registry_managed_funds()`    | Configure fund management mode               |
+| `delete_payment_record<T>()`             | Remove expired payment records               |
+| `withdraw_from_registry<T>()`            | Withdraw registry-managed funds (admin only) |
+| `create_payment_key<T>()`                | Create a key for payment record operations   |
+
+### Error Codes
+
+| Code | Name                                     | Description                  |
+| ---- | ---------------------------------------- | ---------------------------- |
+| 0    | `EPaymentAlreadyExists`                  | Duplicate payment detected   |
+| 1    | `EIncorrectAmount`                       | Payment amount mismatch      |
+| 2    | `EPaymentRecordDoesNotExist`             | Receipt not found            |
+| 3    | `EPaymentRecordHasNotExpired`            | Receipt hasn't expired yet   |
+| 4    | `EUnauthorizedAdmin`                     | Invalid admin capability     |
+| 5    | `ERegistryAlreadyExists`                 | Registry name collision      |
+| 6    | `ERegistryNameLengthIsNotAllowed`        | Invalid registry name length |
+| 7    | `ERegistryNameContainsInvalidCharacters` | Invalid characters in name   |
+
+## Use Cases
+
+- **E-commerce Platforms**: Track customer payments and order fulfillment
+- **Subscription Services**: Manage recurring payments with receipt tracking
+- **Digital Marketplaces**: Process payments between buyers and sellers
+- **DeFi Applications**: Integrate payment verification into financial protocols
+- **Gaming Platforms**: Handle in-game purchases and microtransactions
+
+## Security Considerations
+
+- **Admin Capabilities**: Store `RegistryAdminCap` objects securely
+- **Payment Validation**: Always verify amounts match business logic requirements
+- **Unique IDs**: Use cryptographically secure methods for generating payment IDs
+- **Gas Optimization**: Consider storage costs when enabling receipt persistence
+- **Access Control**: Implement proper access controls in integrating applications
