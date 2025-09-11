@@ -12,7 +12,7 @@ use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
 use sui::vec_map::{Self, VecMap};
-use sui_payment_standard::config_value::{Self, ConfigValue};
+use sui_payment_standard::registry_config_value::{Self, RegistryConfigValue};
 
 const EIncorrectAmount: u64 = 1;
 const EPaymentRecordDoesNotExist: u64 = 2;
@@ -41,7 +41,7 @@ public struct Namespace has key {
 public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
-    config: VecMap<String, ConfigValue>,
+    config: VecMap<String, RegistryConfigValue>,
 }
 
 public struct RegistryAdminCap has key, store {
@@ -311,7 +311,7 @@ public fun set_config_epoch_expiration_duration(
 
     registry.upsert_config(
         EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string(),
-        config_value::new_u64(epoch_expiration_duration),
+        registry_config_value::new_u64(epoch_expiration_duration),
     );
 }
 
@@ -324,7 +324,7 @@ public fun set_config_registry_managed_funds(
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
     registry.upsert_config(
         REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string(),
-        config_value::new_bool(registry_managed_funds),
+        registry_config_value::new_bool(registry_managed_funds),
     );
 }
 
@@ -408,7 +408,7 @@ fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
     }
 }
 
-fun upsert_config(registry: &mut PaymentRegistry, key: String, value: ConfigValue) {
+fun upsert_config(registry: &mut PaymentRegistry, key: String, value: RegistryConfigValue) {
     if (registry.config.contains(&key)) {
         registry.config.remove(&key);
     };
