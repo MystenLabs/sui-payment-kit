@@ -14,22 +14,38 @@ use sui::event;
 use sui::vec_map::{Self, VecMap};
 use sui_payment_standard::registry_config_value::{Self, RegistryConfigValue};
 
-const EPaymentAlreadyExists: u64 = 0;
-const EIncorrectAmount: u64 = 1;
-const EPaymentRecordDoesNotExist: u64 = 2;
-const EPaymentRecordHasNotExpired: u64 = 3;
-const EUnauthorizedAdmin: u64 = 4;
-const ERegistryAlreadyExists: u64 = 5;
-const ERegistryNameLengthIsNotAllowed: u64 = 6;
-const ERegistryNameContainsInvalidCharacters: u64 = 7;
-const EInvalidNonce: u64 = 8;
-const ERegistryMustBeReceiver: u64 = 9;
-const EReceiverMustBeProvided: u64 = 10;
-const ERegistryBalanceDoesNotExist: u64 = 11;
+#[error]
+const EPaymentAlreadyExists: vector<u8> = b"Duplicate payment detected";
+#[error]
+const EIncorrectAmount: vector<u8> = b"Payment amount mismatch";
+#[error]
+const EPaymentRecordDoesNotExist: vector<u8> = b"Payment record not found";
+#[error]
+const EPaymentRecordHasNotExpired: vector<u8> = b"Payment record has not yet expired";
+#[error]
+const EUnauthorizedAdmin: vector<u8> = b"Unauthorized: Invalid admin capability";
+#[error]
+const ERegistryAlreadyExists: vector<u8> = b"Registry with this name already exists";
+#[error]
+const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name length is not allowed";
+#[error]
+const ERegistryNameContainsInvalidCharacters: vector<u8> =
+    b"Registry name contains invalid characters";
+#[error]
+const EInvalidNonce: vector<u8> = b"Nonce is invalid";
+#[error]
+const ERegistryMustBeReceiver: vector<u8> =
+    b"Registry is flagged to manage funds. Receiver must be either None or the registry itself";
+#[error]
+const EReceiverMustBeProvided: vector<u8> =
+    b"Receiver must be provided when a registry does not manage funds";
+#[error]
+const ERegistryBalanceDoesNotExist: vector<u8> =
+    b"Registry balance for this coin type does not exist";
 
 const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
 
-const DEFAULT_REGISTRY_NAME: vector<u8> = b"payment-registry";
+const DEFAULT_PAYMENT_REGISTRY_NAME: vector<u8> = b"default-payment-registry";
 
 const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
 const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
@@ -94,7 +110,10 @@ public struct RegistryConfigKey() has copy, drop, store;
 /// Initializes the module, creating and sharing the Namespace object.
 fun init(ctx: &mut TxContext) {
     let mut namespace = Namespace { id: object::new(ctx) };
-    let (registry, cap) = namespace.create_registry(DEFAULT_REGISTRY_NAME.to_ascii_string(), ctx);
+    let (registry, cap) = namespace.create_registry(
+        DEFAULT_PAYMENT_REGISTRY_NAME.to_ascii_string(),
+        ctx,
+    );
 
     transfer::share_object(namespace);
     transfer::transfer(cap, ctx.sender());
