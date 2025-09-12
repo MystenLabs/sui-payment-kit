@@ -14,32 +14,32 @@ use sui::event;
 use sui::vec_map::{Self, VecMap};
 use sui_payment_standard::registry_config_value::{Self, RegistryConfigValue};
 
-#[error]
+#[error(code = 0)]
 const EPaymentAlreadyExists: vector<u8> = b"Duplicate payment detected";
-#[error]
+#[error(code = 1)]
 const EIncorrectAmount: vector<u8> = b"Payment amount mismatch";
-#[error]
+#[error(code = 2)]
 const EPaymentRecordDoesNotExist: vector<u8> = b"Payment record not found";
-#[error]
+#[error(code = 3)]
 const EPaymentRecordHasNotExpired: vector<u8> = b"Payment record has not yet expired";
-#[error]
+#[error(code = 4)]
 const EUnauthorizedAdmin: vector<u8> = b"Unauthorized: Invalid admin capability";
-#[error]
+#[error(code = 5)]
 const ERegistryAlreadyExists: vector<u8> = b"Registry with this name already exists";
-#[error]
+#[error(code = 6)]
 const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name length is not allowed";
-#[error]
+#[error(code = 7)]
 const ERegistryNameContainsInvalidCharacters: vector<u8> =
     b"Registry name contains invalid characters";
-#[error]
+#[error(code = 8)]
 const EInvalidNonce: vector<u8> = b"Nonce is invalid";
-#[error]
+#[error(code = 9)]
 const ERegistryMustBeReceiver: vector<u8> =
     b"Registry is flagged to manage funds. Receiver must be either None or the registry itself";
-#[error]
+#[error(code = 10)]
 const EReceiverMustBeProvided: vector<u8> =
     b"Receiver must be provided when a registry does not manage funds";
-#[error]
+#[error(code = 11)]
 const ERegistryBalanceDoesNotExist: vector<u8> =
     b"Registry balance for this coin type does not exist";
 
