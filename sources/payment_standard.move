@@ -27,10 +27,10 @@ const EUnauthorizedAdmin: vector<u8> = b"Unauthorized: Invalid admin capability"
 #[error(code = 5)]
 const ERegistryAlreadyExists: vector<u8> = b"Registry with this name already exists";
 #[error(code = 6)]
-const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name length is not allowed";
+const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name has to be between 3 and 63 characters";
 #[error(code = 7)]
 const ERegistryNameContainsInvalidCharacters: vector<u8> =
-    b"Registry name contains invalid characters";
+    b"Registry name can only contain lowercase letters, digits, and hyphens (not in the beginning or end)";
 #[error(code = 8)]
 const EInvalidNonce: vector<u8> = b"Nonce is invalid";
 #[error(code = 9)]
@@ -102,10 +102,6 @@ public struct PaymentRecord has copy, drop, store {
 
 /// Key for storing/retrieving the balance of a specific coin type in a registry.
 public struct BalanceKey<phantom T>() has copy, drop, store;
-
-/// Configurations are sets of additional functionality that can be assigned to a PaymentRegistry.
-/// They are stored in a DynamicField within the registry, under their respective key structs.
-public struct RegistryConfigKey() has copy, drop, store;
 
 /// Initializes the module, creating and sharing the Namespace object.
 fun init(ctx: &mut TxContext) {
@@ -444,8 +440,7 @@ fun write_payment_record<T>(
     );
 }
 
-/// Converts a PaymentReceipt into a PaymentKey for storage/retrieval of the corresponding PaymentRecord.
-/// The coin type is used as a phantom type parameter to ensure uniqueness per coin type.
+/// Convert Receipt into a key
 fun to_payment_record_key<T>(receipt: &PaymentReceipt): PaymentKey<T> {
     PaymentKey {
         nonce: receipt.nonce,
@@ -477,14 +472,14 @@ fun upsert_config(registry: &mut PaymentRegistry, key: String, value: RegistryCo
 
 /// Checks if the provided admin capability is valid for the given registry.
 fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
-    cap.registry_id == object::id(registry)
+    registry.cap_id == object::id(cap)
 }
 
 /// Validates that a registry name conforms to SuiNS standards
 /// - Length between 3 and 63 characters
 /// - Contains only lowercase letters, digits, and hyphens
 /// - Does not start or end with a hyphen
-fun validate_registry_name(name: String) {
+public(package) fun validate_registry_name(name: String) {
     assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
 
     let bytes = name.as_bytes();
@@ -510,7 +505,7 @@ fun validate_registry_name(name: String) {
 
 /// Validates that a nonce is non-empty and does not exceed 36 characters.
 /// This helps prevent excessively long nonces that could lead to storage issues.
-fun validate_nonce(nonce: &String) {
+public(package) fun validate_nonce(nonce: &String) {
     assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
 }
 
