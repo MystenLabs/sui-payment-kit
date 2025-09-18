@@ -27,8 +27,7 @@ const EUnauthorizedAdmin: vector<u8> = b"Unauthorized: Invalid admin capability"
 #[error(code = 5)]
 const ERegistryAlreadyExists: vector<u8> = b"Registry with this name already exists";
 #[error(code = 6)]
-const ERegistryNameLengthIsNotAllowed: vector<u8> =
-    b"Registry name has to be between 3 and 63 characters";
+const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name has to be between 3 and 63 characters";
 #[error(code = 7)]
 const ERegistryNameContainsInvalidCharacters: vector<u8> =
     b"Registry name can only contain lowercase letters, digits, and hyphens (not in the beginning or end)";
@@ -50,16 +49,6 @@ const DEFAULT_PAYMENT_REGISTRY_NAME: vector<u8> = b"default-payment-registry";
 
 const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
 const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
-
-/// The Epoch Expiration Duration config key.
-public fun epoch_expiration_duration_config_key(): String {
-    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
-}
-
-/// The Registry Managed Funds config key.
-public fun registry_managed_funds_config_key(): String {
-    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
-}
 
 /// Representation the higher order namespace object that contains all payment registries.
 /// There should only be one instance of this object, created at module initialization.
@@ -393,20 +382,6 @@ public fun set_config_registry_managed_funds(
 /// * `registry` - The PaymentRegistry to share
 public fun share(registry: PaymentRegistry) {
     transfer::share_object(registry);
-}
-
-/// Retrieves a configuration value from the registry's config map.
-/// # Parameters
-/// * `registry` - The PaymentRegistry to query
-/// * `key` - The configuration key to look up
-///
-/// # Returns
-/// `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
-public fun try_get_config_value(
-    registry: &PaymentRegistry,
-    key: String,
-): Option<RegistryConfigValue> {
-    registry.config.try_get(&key)
 }
 
 /// Internal function to create a payment receipt and emit the corresponding event.
