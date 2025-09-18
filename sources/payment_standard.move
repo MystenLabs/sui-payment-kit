@@ -51,16 +51,6 @@ const DEFAULT_PAYMENT_REGISTRY_NAME: vector<u8> = b"default-payment-registry";
 const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
 const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
 
-/// The Epoch Expiration Duration config key.
-public fun epoch_expiration_duration_config_key(): String {
-    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
-}
-
-/// The Registry Managed Funds config key.
-public fun registry_managed_funds_config_key(): String {
-    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
-}
-
 /// Representation the higher order namespace object that contains all payment registries.
 /// There should only be one instance of this object, created at module initialization.
 public struct Namespace has key {
@@ -395,20 +385,6 @@ public fun share(registry: PaymentRegistry) {
     transfer::share_object(registry);
 }
 
-/// Retrieves a configuration value from the registry's config map.
-/// # Parameters
-/// * `registry` - The PaymentRegistry to query
-/// * `key` - The configuration key to look up
-///
-/// # Returns
-/// `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
-public fun try_get_config_value(
-    registry: &PaymentRegistry,
-    key: String,
-): Option<RegistryConfigValue> {
-    registry.config.try_get(&key)
-}
-
 /// Internal function to create a payment receipt and emit the corresponding event.
 /// Validates the payment amount and nonce.
 fun internal_create_receipt<T>(
@@ -532,6 +508,25 @@ public(package) fun validate_registry_name(name: String) {
 /// This helps prevent excessively long nonces that could lead to storage issues.
 public(package) fun validate_nonce(nonce: &String) {
     assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
+}
+
+/// Retrieves a configuration value from the registry's config map.
+/// Returns `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
+public(package) fun try_get_config_value(
+    registry: &PaymentRegistry,
+    key: String,
+): Option<RegistryConfigValue> {
+    registry.config.try_get(&key)
+}
+
+/// The Epoch Expiration Duration config key.
+public(package) fun epoch_expiration_duration_config_key(): String {
+    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
+}
+
+/// The Registry Managed Funds config key.
+public(package) fun registry_managed_funds_config_key(): String {
+    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
 }
 
 #[test_only]
