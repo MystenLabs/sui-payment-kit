@@ -14,7 +14,8 @@ use sui_payment_standard::payment_standard::{
     Namespace,
     PaymentRegistry,
     RegistryAdminCap,
-    epoch_expiration_duration_config_key
+    epoch_expiration_duration_config_key,
+    registry_managed_funds_config_key
 };
 use sui_payment_standard::registry_config_value;
 
@@ -336,9 +337,9 @@ fun test_set_config_success() {
     });
 }
 
-/// Tests that setting a config replaces previous value.
+/// Tests that epoch expiration duration config upsert replaces previous value.
 #[test]
-fun test_upsert_config_success() {
+fun test_epoch_expiration_duration_upsert_config_success() {
     test_tx!(|scenario, clock, registry, namespace| {
         let cap = scenario.take_from_sender<RegistryAdminCap>();
 
@@ -375,6 +376,42 @@ fun test_upsert_config_success() {
             *config_value.borrow(),
             registry_config_value::new_u64(epoch_expiration_duration),
         );
+
+        scenario.return_to_sender(cap);
+    });
+}
+
+/// Tests that registry managed funds config upsert replaces previous value.
+#[test]
+fun test_upsert_config_success() {
+    test_tx!(|scenario, clock, registry, namespace| {
+        let cap = scenario.take_from_sender<RegistryAdminCap>();
+
+        // First set registry_managed_funds to true
+        registry.set_config_registry_managed_funds(
+            &cap,
+            true, // registry_managed_funds
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            registry_managed_funds_config_key(),
+        );
+
+        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(true));
+
+        // Update registry_managed_funds to false
+        registry.set_config_registry_managed_funds(
+            &cap,
+            false, // registry_managed_funds
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            registry_managed_funds_config_key(),
+        );
+
+        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(false));
 
         scenario.return_to_sender(cap);
     });
