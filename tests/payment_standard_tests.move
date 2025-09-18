@@ -2,13 +2,22 @@
 #[allow(unused_mut_ref, unused_variable, dead_code)]
 module sui_payment_standard::payment_standard_tests;
 
+use std::unit_test::assert_eq;
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
 use sui::object::new;
 use sui::sui::SUI;
 use sui::test_scenario::{Self, Scenario};
 use sui::test_utils;
-use sui_payment_standard::payment_standard::{Self, Namespace, PaymentRegistry, RegistryAdminCap};
+use sui_payment_standard::payment_standard::{
+    Self,
+    Namespace,
+    PaymentRegistry,
+    RegistryAdminCap,
+    epoch_expiration_duration_config_key,
+    registry_managed_funds_config_key
+};
+use sui_payment_standard::registry_config_value;
 
 const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
@@ -37,6 +46,24 @@ fun test_create_registry() {
         test_utils::destroy(registry);
         test_utils::destroy(cap);
     });
+}
+
+/// Tests creating a payment registry with the same name twice fails.
+#[test, expected_failure(abort_code = payment_standard::ERegistryAlreadyExists)]
+fun test_registry_already_exists_failure() {
+    test_tx!(|scenario, _clock, _registry, namespace| {
+        let (_registry, _cap) = namespace.create_registry(
+            b"testregistry".to_ascii_string(),
+            scenario.ctx(),
+        );
+
+        let (_registry, _cap) = namespace.create_registry(
+            b"testregistry".to_ascii_string(),
+            scenario.ctx(),
+        );
+    });
+
+    abort
 }
 
 /// Tests processing a payment where the coin amount exactly matches the payment amount.
@@ -310,9 +337,89 @@ fun test_set_config_success() {
     });
 }
 
-/// Tests that setting config fails when caller is not admin.
+/// Tests that epoch expiration duration config upsert replaces previous value.
+#[test]
+fun test_epoch_expiration_duration_upsert_config_success() {
+    test_tx!(|scenario, clock, registry, namespace| {
+        let cap = scenario.take_from_sender<RegistryAdminCap>();
+
+        // First set epoch_expiration_duration to 1000
+        let epoch_expiration_duration = 1000;
+        registry.set_config_epoch_expiration_duration(
+            &cap,
+            epoch_expiration_duration,
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            epoch_expiration_duration_config_key(),
+        );
+
+        assert_eq!(
+            *config_value.borrow(),
+            registry_config_value::new_u64(epoch_expiration_duration),
+        );
+
+        // Update epoch_expiration_duration to 2000
+        let epoch_expiration_duration = 2000;
+        registry.set_config_epoch_expiration_duration(
+            &cap,
+            epoch_expiration_duration,
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            epoch_expiration_duration_config_key(),
+        );
+
+        assert_eq!(
+            *config_value.borrow(),
+            registry_config_value::new_u64(epoch_expiration_duration),
+        );
+
+        scenario.return_to_sender(cap);
+    });
+}
+
+/// Tests that registry managed funds config upsert replaces previous value.
+#[test]
+fun test_upsert_config_success() {
+    test_tx!(|scenario, clock, registry, namespace| {
+        let cap = scenario.take_from_sender<RegistryAdminCap>();
+
+        // First set registry_managed_funds to true
+        registry.set_config_registry_managed_funds(
+            &cap,
+            true, // registry_managed_funds
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            registry_managed_funds_config_key(),
+        );
+
+        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(true));
+
+        // Update registry_managed_funds to false
+        registry.set_config_registry_managed_funds(
+            &cap,
+            false, // registry_managed_funds
+            scenario.ctx(),
+        );
+
+        let config_value = registry.try_get_config_value(
+            registry_managed_funds_config_key(),
+        );
+
+        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(false));
+
+        scenario.return_to_sender(cap);
+    });
+}
+
+/// Tests that setting epoch expiration duration config fails when caller is not admin.
 #[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
-fun test_set_config_unauthorized() {
+fun test_set_epoch_expiration_config_unauthorized() {
     test_tx!(|scenario, clock, default_registry, namespace| {
         let (another_registry, another_cap) = namespace.create_registry(
             b"testregistry".to_ascii_string(),
@@ -322,6 +429,24 @@ fun test_set_config_unauthorized() {
         default_registry.set_config_epoch_expiration_duration(
             &another_cap,
             1000, // epoch_expiration_duration
+            scenario.ctx(),
+        );
+        abort
+    });
+}
+
+/// Tests that setting registry managed funds config fails when caller is not admin.
+#[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
+fun test_set_registry_managed_funds_config_unauthorized() {
+    test_tx!(|scenario, clock, default_registry, namespace| {
+        let (another_registry, another_cap) = namespace.create_registry(
+            b"testregistry".to_ascii_string(),
+            scenario.ctx(),
+        );
+
+        default_registry.set_config_registry_managed_funds(
+            &another_cap,
+            true, // registry_managed_funds
             scenario.ctx(),
         );
         abort
@@ -582,6 +707,25 @@ fun test_registry_withdraw_unauthorized() {
 
         // Try to withdraw the funds from the registry
         let _withdrawn = registry.withdraw_from_registry<SUI>(&invalid_cap, scenario.ctx());
+
+        abort
+    })
+}
+
+/// Tests that withdrawing a balance of zero fails.
+#[test, expected_failure(abort_code = payment_standard::ERegistryBalanceDoesNotExist)]
+fun test_registry_withdraw_balance_does_not_exist() {
+    test_tx!(|scenario, clock, registry, namespace| {
+        let cap = scenario.take_from_sender<RegistryAdminCap>();
+
+        registry.set_config_registry_managed_funds(
+            &cap,
+            true,
+            scenario.ctx(),
+        );
+
+        // Try to withdraw the funds from the registry
+        let _withdrawn = registry.withdraw_from_registry<SUI>(&cap, scenario.ctx());
 
         abort
     })

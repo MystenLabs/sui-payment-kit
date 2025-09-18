@@ -27,7 +27,8 @@ const EUnauthorizedAdmin: vector<u8> = b"Unauthorized: Invalid admin capability"
 #[error(code = 5)]
 const ERegistryAlreadyExists: vector<u8> = b"Registry with this name already exists";
 #[error(code = 6)]
-const ERegistryNameLengthIsNotAllowed: vector<u8> = b"Registry name has to be between 3 and 63 characters";
+const ERegistryNameLengthIsNotAllowed: vector<u8> =
+    b"Registry name has to be between 3 and 63 characters";
 #[error(code = 7)]
 const ERegistryNameContainsInvalidCharacters: vector<u8> =
     b"Registry name can only contain lowercase letters, digits, and hyphens (not in the beginning or end)";
@@ -507,6 +508,25 @@ public(package) fun validate_registry_name(name: String) {
 /// This helps prevent excessively long nonces that could lead to storage issues.
 public(package) fun validate_nonce(nonce: &String) {
     assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
+}
+
+/// Retrieves a configuration value from the registry's config map.
+/// Returns `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
+public(package) fun try_get_config_value(
+    registry: &PaymentRegistry,
+    key: String,
+): Option<RegistryConfigValue> {
+    registry.config.try_get(&key)
+}
+
+/// The Epoch Expiration Duration config key.
+public(package) fun epoch_expiration_duration_config_key(): String {
+    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
+}
+
+/// The Registry Managed Funds config key.
+public(package) fun registry_managed_funds_config_key(): String {
+    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
 }
 
 #[test_only]
