@@ -38,6 +38,9 @@ const EInvalidNonce: vector<u8> = b"Nonce is invalid";
 const ERegistryMustBeReceiver: vector<u8> =
     b"Registry is flagged to manage funds. Receiver must be either None or the registry itself";
 #[error(code = 10)]
+const EReceiverMustBeProvided: vector<u8> =
+    b"Receiver must be provided when a registry does not manage funds";
+#[error(code = 11)]
 const ERegistryBalanceDoesNotExist: vector<u8> =
     b"Registry balance for this coin type does not exist";
 
@@ -193,7 +196,7 @@ public fun process_ephemeral_payment<T>(
 /// * `nonce` - Unique nonce for the payment
 /// * `payment_amount` - Expected payment amount
 /// * `coin` - Coin to be transferred
-/// * `receiver` - Address of the payment receiver. If the registry is configured to manage funds, this must be the registry's own address.
+/// * `receiver` - Optional address of the payment receiver. If the registry is configured to manage funds, this must be either `None` or the registry's own address.
 /// * `clock` - Reference to the Clock object
 ///
 /// # Aborts
@@ -207,7 +210,7 @@ public fun process_payment_in_registry<T>(
     nonce: String,
     payment_amount: u64,
     coin: Coin<T>,
-    receiver: address,
+    mut receiver: Option<address>,
     clock: &Clock,
     ctx: &mut TxContext,
 ): PaymentReceipt {
@@ -218,14 +221,22 @@ public fun process_payment_in_registry<T>(
 
     // Validate receiver requirements based on registry configuration BEFORE consuming it
     if (funds_managed_by_registry) {
-        assert!(receiver == registry.id.to_address(), ERegistryMustBeReceiver);
+        assert!(
+            receiver.is_none() || receiver.is_some_and!(|r| r == registry.id.to_address()),
+            ERegistryMustBeReceiver,
+        );
+    } else {
+        assert!(receiver.is_some(), EReceiverMustBeProvided);
     };
+
+    // Extract the actual receiver address for use in receipt and transfer
+    let actual_receiver = receiver.extract_or!(registry.id.to_address());
 
     let receipt = PaymentType::Registry(registry.id.to_inner()).internal_create_receipt(
         &coin,
         payment_amount,
         nonce,
-        receiver,
+        actual_receiver,
         clock,
     );
 
@@ -233,7 +244,7 @@ public fun process_payment_in_registry<T>(
         registry.collect_payment(coin);
     } else {
         // Transfer the coin to the receiver.
-        transfer::public_transfer(coin, receiver);
+        transfer::public_transfer(coin, actual_receiver);
     };
 
     registry.write_payment_record<T>(receipt, ctx);
