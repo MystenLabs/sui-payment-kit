@@ -71,7 +71,7 @@ fun test_registry_already_exists_failure() {
 fun test_successful_payment_exact_amount() {
     test_tx!(|scenario, clock, registry, namespace| {
         let coin = create_test_coin(scenario, 1000);
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             coin,
@@ -87,7 +87,7 @@ fun test_successful_payment_exact_amount() {
 fun test_overpayment_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
         let coin = create_test_coin(scenario, 1500);
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             coin,
@@ -102,7 +102,7 @@ fun test_overpayment_failure() {
 #[test, expected_failure(abort_code = payment_standard::EPaymentAlreadyExists)]
 fun test_duplicate_payment_hash_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             create_test_coin(scenario, 1000),
@@ -111,7 +111,7 @@ fun test_duplicate_payment_hash_failure() {
             scenario.ctx(),
         );
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             create_test_coin(scenario, 1000),
@@ -126,7 +126,7 @@ fun test_duplicate_payment_hash_failure() {
 #[test, expected_failure(abort_code = payment_standard::EIncorrectAmount)]
 fun test_insufficient_amount_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000, // Expected 1000 but coin only has 500
             create_test_coin(scenario, 500), // less than expected
@@ -141,7 +141,7 @@ fun test_insufficient_amount_failure() {
 #[test]
 fun test_multiple_different_nonces() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt1 = registry.process_payment_in_registry<SUI>(
+        let _receipt1 = registry.process_registry_payment<SUI>(
             b"1".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -150,7 +150,7 @@ fun test_multiple_different_nonces() {
             scenario.ctx(),
         );
 
-        let _receipt2 = registry.process_payment_in_registry<SUI>(
+        let _receipt2 = registry.process_registry_payment<SUI>(
             b"2".to_ascii_string(),
             1500,
             create_test_coin(scenario, 1500),
@@ -159,7 +159,7 @@ fun test_multiple_different_nonces() {
             scenario.ctx(),
         );
 
-        let _receipt3 = registry.process_payment_in_registry<SUI>(
+        let _receipt3 = registry.process_registry_payment<SUI>(
             b"3".to_ascii_string(),
             500,
             create_test_coin(scenario, 500),
@@ -174,7 +174,7 @@ fun test_multiple_different_nonces() {
 #[test]
 fun test_large_nonce_values() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"18446744073709551615".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -189,7 +189,7 @@ fun test_large_nonce_values() {
 #[test]
 fun test_delete_expired_payment_record_success() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -245,7 +245,7 @@ fun test_delete_payment_record_not_expired() {
         );
         scenario.return_to_sender(cap);
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -269,7 +269,7 @@ fun test_delete_payment_record_not_expired() {
 #[test, expected_failure(abort_code = payment_standard::EPaymentRecordHasNotExpired)]
 fun test_30_epoch_expiration_duration() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -535,7 +535,7 @@ fun test_registry_managed_funds_no_receiver() {
             scenario.ctx(),
         );
         // Process payment with no receiver (should default to registry)
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -569,7 +569,7 @@ fun test_registry_managed_funds_registry_as_receiver() {
         let registry_address = object::id_address(registry);
 
         // Process payment with no receiver (should default to registry)
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"67890".to_ascii_string(),
             2000,
             create_test_coin(scenario, 2000),
@@ -600,7 +600,7 @@ fun test_registry_managed_funds_invalid_receiver() {
             scenario.ctx(),
         );
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -617,7 +617,7 @@ fun test_registry_managed_funds_invalid_receiver() {
 #[test, expected_failure(abort_code = payment_standard::EReceiverMustBeProvided)]
 fun test_receiver_required_when_funds_not_managed() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -643,7 +643,7 @@ fun test_registry_managed_funds_multiple_payments() {
         );
 
         // Process multiple payments
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"payment1".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
@@ -652,7 +652,7 @@ fun test_registry_managed_funds_multiple_payments() {
             scenario.ctx(),
         );
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"payment2".to_ascii_string(),
             2000,
             create_test_coin(scenario, 2000),
@@ -661,7 +661,7 @@ fun test_registry_managed_funds_multiple_payments() {
             scenario.ctx(),
         );
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"payment3".to_ascii_string(),
             1500,
             create_test_coin(scenario, 1500),
@@ -696,7 +696,7 @@ fun test_registry_withdraw_unauthorized() {
             scenario.ctx(),
         );
 
-        let _receipt = registry.process_payment_in_registry<SUI>(
+        let _receipt = registry.process_registry_payment<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),

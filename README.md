@@ -75,7 +75,7 @@ payment_standard::set_config_registry_managed_funds(
 );
 
 // Process payments through the registry
-let receipt = payment_standard::process_payment_in_registry<SUI>(
+let receipt = payment_standard::process_registry_payment<SUI>(
     &mut registry,
     b"order_456".to_ascii_string(),   // unique payment ID (nonce)
     2500000,                          // amount in MIST
@@ -145,7 +145,7 @@ transfer::public_transfer(withdrawn_coins, @0xadmin_wallet);
 | Function                                 | Description                                  |
 | ---------------------------------------- | -------------------------------------------- |
 | `process_ephemeral_payment<T>()`         | Process a simple payment with event emission |
-| `process_payment_in_registry<T>()`       | Process payment through a registry           |
+| `process_registry_payment<T>()`          | Process payment through a registry           |
 | `create_registry()`                      | Create a new payment registry                |
 | `set_config_epoch_expiration_duration()` | Set receipt expiration in epochs             |
 | `set_config_registry_managed_funds()`    | Configure fund management mode               |
@@ -155,20 +155,20 @@ transfer::public_transfer(withdrawn_coins, @0xadmin_wallet);
 
 ### Error Codes
 
-| Name                                     | Message                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `EPaymentAlreadyExists`                  | Duplicate payment detected                                                                 |
-| `EIncorrectAmount`                       | Payment amount mismatch                                                                    |
-| `EPaymentRecordDoesNotExist`             | Payment record not found                                                                   |
-| `EPaymentRecordHasNotExpired`            | Payment record has not yet expired                                                         |
-| `EUnauthorizedAdmin`                     | Unauthorized: Invalid admin capability                                                     |
-| `ERegistryAlreadyExists`                 | Registry with this name already exists                                                     |
-| `ERegistryNameLengthIsNotAllowed`        | Registry name length is not allowed                                                        |
-| `ERegistryNameContainsInvalidCharacters` | Registry name contains invalid characters                                                  |
-| `EInvalidNonce`                          | Nonce is invalid                                                                           |
-| `ERegistryMustBeReceiver`                | Registry is flagged to manage funds. Receiver must be either None or the registry itself   |
-| `EReceiverMustBeProvided`                | Receiver must be provided when a registry does not manage funds                            |
-| `ERegistryBalanceDoesNotExist`           | Registry balance for this coin type does not exist                                         |
+| Name                                     | Message                                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `EPaymentAlreadyExists`                  | Duplicate payment detected                                                               |
+| `EIncorrectAmount`                       | Payment amount mismatch                                                                  |
+| `EPaymentRecordDoesNotExist`             | Payment record not found                                                                 |
+| `EPaymentRecordHasNotExpired`            | Payment record has not yet expired                                                       |
+| `EUnauthorizedAdmin`                     | Unauthorized: Invalid admin capability                                                   |
+| `ERegistryAlreadyExists`                 | Registry with this name already exists                                                   |
+| `ERegistryNameLengthIsNotAllowed`        | Registry name length is not allowed                                                      |
+| `ERegistryNameContainsInvalidCharacters` | Registry name contains invalid characters                                                |
+| `EInvalidNonce`                          | Nonce is invalid                                                                         |
+| `ERegistryMustBeReceiver`                | Registry is flagged to manage funds. Receiver must be either None or the registry itself |
+| `EReceiverMustBeProvided`                | Receiver must be provided when a registry does not manage funds                          |
+| `ERegistryBalanceDoesNotExist`           | Registry balance for this coin type does not exist                                       |
 
 ## Use Cases
 

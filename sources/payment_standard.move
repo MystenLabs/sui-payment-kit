@@ -205,7 +205,7 @@ public fun process_ephemeral_payment<T>(
 ///
 /// # Returns
 /// The payment receipt
-public fun process_payment_in_registry<T>(
+public fun process_registry_payment<T>(
     registry: &mut PaymentRegistry,
     nonce: String,
     payment_amount: u64,
