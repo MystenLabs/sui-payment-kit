@@ -75,7 +75,7 @@ fun test_successful_payment_exact_amount() {
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             coin,
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -91,7 +91,7 @@ fun test_overpayment_failure() {
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             coin,
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -106,7 +106,7 @@ fun test_duplicate_payment_hash_failure() {
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -115,7 +115,7 @@ fun test_duplicate_payment_hash_failure() {
             b"12345".to_ascii_string(), // payment_id
             1000, // payment_amount
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -130,7 +130,7 @@ fun test_insufficient_amount_failure() {
             b"12345".to_ascii_string(),
             1000, // Expected 1000 but coin only has 500
             create_test_coin(scenario, 500), // less than expected
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -145,7 +145,7 @@ fun test_multiple_different_nonces() {
             b"1".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -154,7 +154,7 @@ fun test_multiple_different_nonces() {
             b"2".to_ascii_string(),
             1500,
             create_test_coin(scenario, 1500),
-            option::some(CHARLIE),
+            CHARLIE,
             clock,
             scenario.ctx(),
         );
@@ -163,7 +163,7 @@ fun test_multiple_different_nonces() {
             b"3".to_ascii_string(),
             500,
             create_test_coin(scenario, 500),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -178,7 +178,7 @@ fun test_large_nonce_values() {
             b"18446744073709551615".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -193,7 +193,7 @@ fun test_delete_expired_payment_record_success() {
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -249,7 +249,7 @@ fun test_delete_payment_record_not_expired() {
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -273,7 +273,7 @@ fun test_30_epoch_expiration_duration() {
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB),
+            BOB,
             clock,
             scenario.ctx(),
         );
@@ -534,12 +534,15 @@ fun test_registry_managed_funds_no_receiver() {
             true,
             scenario.ctx(),
         );
+
+        let registry_address = object::id_address(registry);
+
         // Process payment with no receiver (should default to registry)
         let _receipt = registry.process_payment_in_registry<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            std::option::none(), // No receiver specified
+            registry_address, // Registry as receiver
             clock,
             scenario.ctx(),
         );
@@ -573,7 +576,7 @@ fun test_registry_managed_funds_registry_as_receiver() {
             b"67890".to_ascii_string(),
             2000,
             create_test_coin(scenario, 2000),
-            std::option::some(registry_address), // Registry as receiver
+            registry_address, // Registry as receiver
             clock,
             scenario.ctx(),
         );
@@ -604,24 +607,7 @@ fun test_registry_managed_funds_invalid_receiver() {
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            option::some(BOB), // Wrong address as receiver
-            clock,
-            scenario.ctx(),
-        );
-
-        abort
-    })
-}
-
-/// Tests that receiver must be provided when registry_managed_funds is disabled.
-#[test, expected_failure(abort_code = payment_standard::EReceiverMustBeProvided)]
-fun test_receiver_required_when_funds_not_managed() {
-    test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = registry.process_payment_in_registry<SUI>(
-            b"12345".to_ascii_string(),
-            1000,
-            create_test_coin(scenario, 1000),
-            std::option::none(), // No receiver - should fail
+            BOB, // Wrong address as receiver
             clock,
             scenario.ctx(),
         );
@@ -642,12 +628,14 @@ fun test_registry_managed_funds_multiple_payments() {
             scenario.ctx(),
         );
 
+        let registry_address = object::id_address(registry);
+
         // Process multiple payments
         let _receipt = registry.process_payment_in_registry<SUI>(
             b"payment1".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            std::option::none(),
+            registry_address, // Registry as receiver
             clock,
             scenario.ctx(),
         );
@@ -656,7 +644,7 @@ fun test_registry_managed_funds_multiple_payments() {
             b"payment2".to_ascii_string(),
             2000,
             create_test_coin(scenario, 2000),
-            std::option::none(),
+            registry_address, // Registry as receiver
             clock,
             scenario.ctx(),
         );
@@ -665,7 +653,7 @@ fun test_registry_managed_funds_multiple_payments() {
             b"payment3".to_ascii_string(),
             1500,
             create_test_coin(scenario, 1500),
-            std::option::none(),
+            registry_address, // Registry as receiver
             clock,
             scenario.ctx(),
         );
@@ -696,11 +684,13 @@ fun test_registry_withdraw_unauthorized() {
             scenario.ctx(),
         );
 
+        let registry_address = object::id_address(registry);
+
         let _receipt = registry.process_payment_in_registry<SUI>(
             b"12345".to_ascii_string(),
             1000,
             create_test_coin(scenario, 1000),
-            std::option::none(),
+            registry_address,
             clock,
             scenario.ctx(),
         );
