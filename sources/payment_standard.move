@@ -52,7 +52,7 @@ const EPOCH_EXPIRATION_DURATION_KEY: vector<u8> = b"epoch_expiration_duration";
 const REGISTRY_MANAGED_FUNDS_KEY: vector<u8> = b"registry_managed_funds";
 
 /// Representation the higher order namespace object that contains all payment registries.
-/// There should only be one instance of this object, created at module initialization.
+/// There should only be one instance of this object, created through `init`.
 public struct Namespace has key {
     id: UID,
 }
@@ -117,14 +117,8 @@ fun init(ctx: &mut TxContext) {
     registry.share();
 }
 
-/// Creates a new payment registry
-///
-/// # Parameters
-/// * `namespace` - The Namespace object under which to create the registry
-/// * `name` - The name of the registry. Must be unique within the namespace.
-///
-/// # Returns
-/// A new PaymentRegistry instance
+/// Creates a new payment registry with a supplied label. Label is used to derive
+/// the registry's ID.
 public fun create_registry(
     namespace: &mut Namespace,
     name: String,
@@ -152,19 +146,6 @@ public fun create_registry(
 }
 
 /// Processes a payment (without the use of a Registry), emitting a payment receipt event.
-///
-/// # Parameters
-/// * `nonce` - Unique nonce for the payment
-/// * `payment_amount` - Expected payment amount
-/// * `coin` - Coin to be transferred
-/// * `receiver` - Address of the payment receiver
-/// * `clock` - Reference to the Clock object
-///
-/// # Aborts
-/// * If the coin amount does not match the expected payment amount
-///
-/// # Returns
-/// The payment receipt
 public fun process_ephemeral_payment<T>(
     nonce: String,
     payment_amount: u64,
@@ -188,22 +169,8 @@ public fun process_ephemeral_payment<T>(
     receipt
 }
 
-/// Processes a payment via a payment registry, writing a receipt to the registry.
-///
-/// # Parameters
-/// * `registry` - Payment registry to write the receipt to
-/// * `nonce` - Unique nonce for the payment
-/// * `payment_amount` - Expected payment amount
-/// * `coin` - Coin to be transferred
-/// * `receiver` - Optional address of the payment receiver. If the registry is configured to manage funds, this must be either `None` or the registry's own address.
-/// * `clock` - Reference to the Clock object
-///
-/// # Aborts
-/// * If a receipt with the same payment parameters already exists in the registry
-/// * If the coin amount does not match the expected payment amount
-///
-/// # Returns
-/// The payment receipt
+/// Processes a payment via a payment registry, writing a receipt to the registry and protecting
+/// from double spending for the same key.
 public fun process_registry_payment<T>(
     registry: &mut PaymentRegistry,
     nonce: String,
@@ -253,14 +220,6 @@ public fun process_registry_payment<T>(
 }
 
 /// If the registry is configured to manage funds, withdraw all funds of the specified coin from the registry.
-///
-/// # Parameters
-/// * `registry` - Payment registry to withdraw funds from
-/// * `cap` - Admin capability for the registry
-///
-/// # Aborts
-/// * If the caller does not have the admin capability for the registry
-/// * If there are no funds of the specified coin type in the registry
 public fun withdraw_from_registry<T>(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
@@ -274,14 +233,6 @@ public fun withdraw_from_registry<T>(
 }
 
 /// Removes an expired Payment Record from the Registry.
-///
-/// # Parameters
-/// * `registry` - Payment registry containing the receipt
-/// * `payment_key` - Hash of payment parameters used as the key for the PaymentRecord
-///
-/// # Aborts
-/// * If receipt with payment hash does not exist
-/// * If receipt has not yet expired (when expiration is enabled)
 public fun delete_payment_record<T>(
     registry: &mut PaymentRegistry,
     payment_key: PaymentKey<T>,
@@ -306,11 +257,6 @@ public fun delete_payment_record<T>(
 }
 
 /// Creates a PaymentKey from payment parameters.
-///
-/// # Parameters
-/// * `nonce` - Unique nonce for the payment
-/// * `payment_amount` - Expected payment amount
-/// * `receiver` - Address of the payment receiver
 public fun create_payment_key<T>(
     nonce: String,
     payment_amount: u64,
@@ -325,15 +271,7 @@ public fun create_payment_key<T>(
 
 /// Sets the epoch expiration duration configuration for the registry.
 /// If set, payment records will expire after the specified number of epochs.
-/// If not set, payment records will never expire.
-///
-/// # Parameters
-/// * `registry` - The PaymentRegistry to configure
-/// * `cap` - Admin capability for the registry
-/// * `epoch_expiration_duration` - Number of epochs after which payment records expire
-///
-/// # Aborts
-/// * If the caller does not have the admin capability for the registry
+/// If not set, payment records will expire 30 epochs after their creation.
 public fun set_config_epoch_expiration_duration(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
@@ -351,13 +289,6 @@ public fun set_config_epoch_expiration_duration(
 /// Sets whether the registry should manage funds itself.
 /// If true, payments processed via the registry will be collected into the registry's balance.
 /// If false, payments will be transferred directly to the specified receiver.
-/// # Parameters
-/// * `registry` - The PaymentRegistry to configure
-/// * `cap` - Admin capability for the registry
-/// * `registry_managed_funds` - Boolean indicating whether the registry should manage funds
-///
-/// # Aborts
-/// * If the caller does not have the admin capability for the registry
 public fun set_config_registry_managed_funds(
     registry: &mut PaymentRegistry,
     cap: &RegistryAdminCap,
