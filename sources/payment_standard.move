@@ -296,19 +296,14 @@ public fun delete_payment_record<T>(
         .map!(|val| val.as_u64())
         .destroy_or!(DEFAULT_EPOCH_EXPIRATION_DURATION);
 
-    let payment_record: &PaymentRecord = df::borrow(
-        &registry.id,
+    let payment_record: PaymentRecord = df::remove(
+        &mut registry.id,
         payment_key,
     );
 
     let expiration_epoch = payment_record.epoch_at_time_of_record + expiration_duration;
 
     assert!(ctx.epoch() >= expiration_epoch, EPaymentRecordHasNotExpired);
-
-    df::remove<_, PaymentRecord>(
-        &mut registry.id,
-        payment_key,
-    );
 }
 
 /// Creates a PaymentKey from payment parameters.
@@ -383,6 +378,59 @@ public fun set_config_registry_managed_funds(
 /// * `registry` - The PaymentRegistry to share
 public fun share(registry: PaymentRegistry) {
     transfer::share_object(registry);
+}
+
+/// Validates that a registry name conforms to SuiNS standards
+/// - Length between 3 and 63 characters
+/// - Contains only lowercase letters, digits, and hyphens
+/// - Does not start or end with a hyphen
+public(package) fun validate_registry_name(name: String) {
+    assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
+
+    let bytes = name.as_bytes();
+    let len = bytes.length();
+
+    // Check each character follows SuiNS standards (letters, digits, hyphens)
+    let mut i = 0;
+    while (i < len) {
+        let c = *bytes.borrow(i);
+        assert!(
+            (c >= 97 && c <= 122) || // lowercase a-z
+            (c >= 48 && c <= 57) ||  // digits 0-9
+            (c == 45), // hyphen -
+            ERegistryNameContainsInvalidCharacters,
+        );
+        i = i + 1;
+    };
+
+    // Names cannot start or end with hyphen
+    assert!(*bytes.borrow(0) != 45, ERegistryNameContainsInvalidCharacters);
+    assert!(*bytes.borrow(len - 1) != 45, ERegistryNameContainsInvalidCharacters);
+}
+
+/// Validates that a nonce is non-empty and does not exceed 36 characters.
+/// This helps prevent excessively long nonces that could lead to storage issues.
+public(package) fun validate_nonce(nonce: &String) {
+    assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
+}
+
+/// Retrieves a configuration value from the registry's config map.
+/// Returns `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
+public(package) fun try_get_config_value(
+    registry: &PaymentRegistry,
+    key: String,
+): Option<RegistryConfigValue> {
+    registry.config.try_get(&key)
+}
+
+/// The Epoch Expiration Duration config key.
+public(package) fun epoch_expiration_duration_config_key(): String {
+    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
+}
+
+/// The Registry Managed Funds config key.
+public(package) fun registry_managed_funds_config_key(): String {
+    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
 }
 
 /// Internal function to create a payment receipt and emit the corresponding event.
@@ -474,59 +522,6 @@ fun upsert_config(registry: &mut PaymentRegistry, key: String, value: RegistryCo
 /// Checks if the provided admin capability is valid for the given registry.
 fun is_valid_for(cap: &RegistryAdminCap, registry: &PaymentRegistry): bool {
     registry.cap_id == object::id(cap)
-}
-
-/// Validates that a registry name conforms to SuiNS standards
-/// - Length between 3 and 63 characters
-/// - Contains only lowercase letters, digits, and hyphens
-/// - Does not start or end with a hyphen
-public(package) fun validate_registry_name(name: String) {
-    assert!(name.length() >= 3 && name.length() <= 63, ERegistryNameLengthIsNotAllowed);
-
-    let bytes = name.as_bytes();
-    let len = bytes.length();
-
-    // Check each character follows SuiNS standards (letters, digits, hyphens)
-    let mut i = 0;
-    while (i < len) {
-        let c = *bytes.borrow(i);
-        assert!(
-            (c >= 97 && c <= 122) || // lowercase a-z
-            (c >= 48 && c <= 57) ||  // digits 0-9
-            (c == 45), // hyphen -
-            ERegistryNameContainsInvalidCharacters,
-        );
-        i = i + 1;
-    };
-
-    // Names cannot start or end with hyphen
-    assert!(*bytes.borrow(0) != 45, ERegistryNameContainsInvalidCharacters);
-    assert!(*bytes.borrow(len - 1) != 45, ERegistryNameContainsInvalidCharacters);
-}
-
-/// Validates that a nonce is non-empty and does not exceed 36 characters.
-/// This helps prevent excessively long nonces that could lead to storage issues.
-public(package) fun validate_nonce(nonce: &String) {
-    assert!(nonce.length() > 0 && nonce.length() <= 36, EInvalidNonce);
-}
-
-/// Retrieves a configuration value from the registry's config map.
-/// Returns `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
-public(package) fun try_get_config_value(
-    registry: &PaymentRegistry,
-    key: String,
-): Option<RegistryConfigValue> {
-    registry.config.try_get(&key)
-}
-
-/// The Epoch Expiration Duration config key.
-public(package) fun epoch_expiration_duration_config_key(): String {
-    EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string()
-}
-
-/// The Registry Managed Funds config key.
-public(package) fun registry_managed_funds_config_key(): String {
-    REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string()
 }
 
 #[test_only]
