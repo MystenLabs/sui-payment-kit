@@ -162,7 +162,6 @@ public fun create_registry(
 ///
 /// # Aborts
 /// * If the coin amount does not match the expected payment amount
-/// * If a receipt with the same payment parameters already exists in the registry
 ///
 /// # Returns
 /// The payment receipt
