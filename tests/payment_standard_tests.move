@@ -1,15 +1,9 @@
 #[test_only]
 #[allow(unused_mut_ref, unused_variable, dead_code)]
-module sui_payment_standard::payment_standard_tests;
+module payment_kit::payment_kit_tests;
 
-use std::unit_test::assert_eq;
-use sui::clock::{Self, Clock};
-use sui::coin::{Self, Coin};
-use sui::object::new;
-use sui::sui::SUI;
-use sui::test_scenario::{Self, Scenario};
-use sui::test_utils;
-use sui_payment_standard::payment_standard::{
+use payment_kit::config;
+use payment_kit::payment_kit::{
     Self,
     Namespace,
     PaymentRegistry,
@@ -17,7 +11,13 @@ use sui_payment_standard::payment_standard::{
     epoch_expiration_duration_config_key,
     registry_managed_funds_config_key
 };
-use sui_payment_standard::registry_config_value;
+use std::unit_test::assert_eq;
+use sui::clock::{Self, Clock};
+use sui::coin::{Self, Coin};
+use sui::object::new;
+use sui::sui::SUI;
+use sui::test_scenario::{Self, Scenario};
+use sui::test_utils;
 
 const ALICE: address = @0xA11CE;
 const BOB: address = @0xB0B;
@@ -49,7 +49,7 @@ fun test_create_registry() {
 }
 
 /// Tests creating a payment registry with the same name twice fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryAlreadyExists)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryAlreadyExists)]
 fun test_registry_already_exists_failure() {
     test_tx!(|scenario, _clock, _registry, namespace| {
         let (_registry, _cap) = namespace.create_registry(
@@ -83,7 +83,7 @@ fun test_successful_payment_exact_amount() {
 }
 
 /// Tests that providing more coin amount than payment amount fails.
-#[test, expected_failure(abort_code = payment_standard::EIncorrectAmount)]
+#[test, expected_failure(abort_code = payment_kit::EIncorrectAmount)]
 fun test_overpayment_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
         let coin = create_test_coin(scenario, 1500);
@@ -99,7 +99,7 @@ fun test_overpayment_failure() {
 }
 
 /// Tests that using identical payment parameters fails.
-#[test, expected_failure(abort_code = payment_standard::EPaymentAlreadyExists)]
+#[test, expected_failure(abort_code = payment_kit::EPaymentAlreadyExists)]
 fun test_duplicate_payment_hash_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
         let _receipt = registry.process_registry_payment<SUI>(
@@ -123,7 +123,7 @@ fun test_duplicate_payment_hash_failure() {
 }
 
 /// Tests that providing insufficient coin amount fails
-#[test, expected_failure(abort_code = payment_standard::EIncorrectAmount)]
+#[test, expected_failure(abort_code = payment_kit::EIncorrectAmount)]
 fun test_insufficient_amount_failure() {
     test_tx!(|scenario, clock, registry, namespace| {
         let _receipt = registry.process_registry_payment<SUI>(
@@ -207,7 +207,7 @@ fun test_delete_expired_payment_record_success() {
         );
 
         registry.delete_payment_record<SUI>(
-            payment_standard::create_payment_key<SUI>(
+            payment_kit::create_payment_key<SUI>(
                 b"12345".to_ascii_string(),
                 1000,
                 BOB,
@@ -219,11 +219,11 @@ fun test_delete_expired_payment_record_success() {
 }
 
 /// Tests that deleting a non-existent payment record fails.
-#[test, expected_failure(abort_code = payment_standard::EPaymentRecordDoesNotExist)]
+#[test, expected_failure(abort_code = payment_kit::EPaymentRecordDoesNotExist)]
 fun test_delete_nonexistent_payment_record() {
     test_tx!(|scenario, clock, registry, namespace| {
         registry.delete_payment_record<SUI>(
-            payment_standard::create_payment_key<SUI>(
+            payment_kit::create_payment_key<SUI>(
                 b"99999".to_ascii_string(),
                 1000,
                 BOB,
@@ -234,7 +234,7 @@ fun test_delete_nonexistent_payment_record() {
 }
 
 /// Tests that deleting a payment record before expiration fails.
-#[test, expected_failure(abort_code = payment_standard::EPaymentRecordHasNotExpired)]
+#[test, expected_failure(abort_code = payment_kit::EPaymentRecordHasNotExpired)]
 fun test_delete_payment_record_not_expired() {
     test_tx!(|scenario, clock, registry, namespace| {
         let cap = scenario.take_from_sender<RegistryAdminCap>();
@@ -255,7 +255,7 @@ fun test_delete_payment_record_not_expired() {
         );
 
         registry.delete_payment_record<SUI>(
-            payment_standard::create_payment_key<SUI>(
+            payment_kit::create_payment_key<SUI>(
                 b"12345".to_ascii_string(),
                 1000,
                 BOB,
@@ -266,7 +266,7 @@ fun test_delete_payment_record_not_expired() {
 }
 
 /// Tests that deleting a payment record fails when using default expiration (30 epochs).
-#[test, expected_failure(abort_code = payment_standard::EPaymentRecordHasNotExpired)]
+#[test, expected_failure(abort_code = payment_kit::EPaymentRecordHasNotExpired)]
 fun test_30_epoch_expiration_duration() {
     test_tx!(|scenario, clock, registry, namespace| {
         let _receipt = registry.process_registry_payment<SUI>(
@@ -281,7 +281,7 @@ fun test_30_epoch_expiration_duration() {
         scenario.next_epoch(ALICE);
 
         registry.delete_payment_record<SUI>(
-            payment_standard::create_payment_key<SUI>(
+            payment_kit::create_payment_key<SUI>(
                 b"12345".to_ascii_string(),
                 1000,
                 BOB,
@@ -294,27 +294,27 @@ fun test_30_epoch_expiration_duration() {
 /// Tests creating registry with valid alphanumeric names.
 #[test]
 fun test_valid_registry_names() {
-    payment_standard::validate_registry_name(b"test123".to_ascii_string());
-    payment_standard::validate_registry_name(b"abc".to_ascii_string());
-    payment_standard::validate_registry_name(b"test-registry-123".to_ascii_string());
+    payment_kit::validate_registry_name(b"test123".to_ascii_string());
+    payment_kit::validate_registry_name(b"abc".to_ascii_string());
+    payment_kit::validate_registry_name(b"test-registry-123".to_ascii_string());
 }
 
 /// Tests that creating registry with special characters fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameContainsInvalidCharacters)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameContainsInvalidCharacters)]
 fun test_invalid_registry_name_special_chars() {
-    payment_standard::validate_registry_name(b"test_registry".to_ascii_string());
+    payment_kit::validate_registry_name(b"test_registry".to_ascii_string());
 }
 
 /// Tests that creating registry with too long name fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameLengthIsNotAllowed)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameLengthIsNotAllowed)]
 fun test_invalid_registry_name_too_long() {
-    payment_standard::validate_registry_name(b"1234567890123456789012345678901234567890123456789012345678901234".to_ascii_string());
+    payment_kit::validate_registry_name(b"1234567890123456789012345678901234567890123456789012345678901234".to_ascii_string());
 }
 
 /// Tests that creating registry with empty name fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameLengthIsNotAllowed)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameLengthIsNotAllowed)]
 fun test_invalid_registry_name_empty() {
-    payment_standard::validate_registry_name(b"".to_ascii_string());
+    payment_kit::validate_registry_name(b"".to_ascii_string());
 }
 
 /// Tests setting payment record config as admin.
@@ -355,10 +355,7 @@ fun test_epoch_expiration_duration_upsert_config_success() {
             epoch_expiration_duration_config_key(),
         );
 
-        assert_eq!(
-            *config_value.borrow(),
-            registry_config_value::new_u64(epoch_expiration_duration),
-        );
+        assert_eq!(*config_value.borrow(), config::new_u64(epoch_expiration_duration));
 
         // Update epoch_expiration_duration to 2000
         let epoch_expiration_duration = 2000;
@@ -372,10 +369,7 @@ fun test_epoch_expiration_duration_upsert_config_success() {
             epoch_expiration_duration_config_key(),
         );
 
-        assert_eq!(
-            *config_value.borrow(),
-            registry_config_value::new_u64(epoch_expiration_duration),
-        );
+        assert_eq!(*config_value.borrow(), config::new_u64(epoch_expiration_duration));
 
         scenario.return_to_sender(cap);
     });
@@ -398,7 +392,7 @@ fun test_upsert_config_success() {
             registry_managed_funds_config_key(),
         );
 
-        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(true));
+        assert_eq!(*config_value.borrow(), config::new_bool(true));
 
         // Update registry_managed_funds to false
         registry.set_config_registry_managed_funds(
@@ -411,14 +405,14 @@ fun test_upsert_config_success() {
             registry_managed_funds_config_key(),
         );
 
-        assert_eq!(*config_value.borrow(), registry_config_value::new_bool(false));
+        assert_eq!(*config_value.borrow(), config::new_bool(false));
 
         scenario.return_to_sender(cap);
     });
 }
 
 /// Tests that setting epoch expiration duration config fails when caller is not admin.
-#[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
+#[test, expected_failure(abort_code = payment_kit::EUnauthorizedAdmin)]
 fun test_set_epoch_expiration_config_unauthorized() {
     test_tx!(|scenario, clock, default_registry, namespace| {
         let (another_registry, another_cap) = namespace.create_registry(
@@ -436,7 +430,7 @@ fun test_set_epoch_expiration_config_unauthorized() {
 }
 
 /// Tests that setting registry managed funds config fails when caller is not admin.
-#[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
+#[test, expected_failure(abort_code = payment_kit::EUnauthorizedAdmin)]
 fun test_set_registry_managed_funds_config_unauthorized() {
     test_tx!(|scenario, clock, default_registry, namespace| {
         let (another_registry, another_cap) = namespace.create_registry(
@@ -454,7 +448,7 @@ fun test_set_registry_managed_funds_config_unauthorized() {
 }
 
 /// Tests that creating registry with names starting with hyphen fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameContainsInvalidCharacters)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameContainsInvalidCharacters)]
 fun test_invalid_registry_name_starts_with_hyphen() {
     test_tx!(|scenario, clock, registry, namespace| {
         // Should fail - starts with hyphen
@@ -468,34 +462,34 @@ fun test_invalid_registry_name_starts_with_hyphen() {
 }
 
 /// Tests that creating registry with names ending with hyphen fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameContainsInvalidCharacters)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameContainsInvalidCharacters)]
 fun test_invalid_registry_name_ends_with_hyphen() {
-    payment_standard::validate_registry_name(b"testregistry-".to_ascii_string());
+    payment_kit::validate_registry_name(b"testregistry-".to_ascii_string());
 }
 
 /// Tests that creating registry with uppercase letters fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryNameContainsInvalidCharacters)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryNameContainsInvalidCharacters)]
 fun test_invalid_registry_name_uppercase() {
-    payment_standard::validate_registry_name(b"MyRegistry".to_ascii_string());
+    payment_kit::validate_registry_name(b"MyRegistry".to_ascii_string());
 }
 
 /// Tests that empty nonce fails
-#[test, expected_failure(abort_code = payment_standard::EInvalidNonce)]
+#[test, expected_failure(abort_code = payment_kit::EInvalidNonce)]
 fun test_empty_nonce_failure() {
-    payment_standard::validate_nonce(&(b"".to_ascii_string()));
+    payment_kit::validate_nonce(&(b"".to_ascii_string()));
 }
 
 /// Tests that nonce longer than 36 characters fails.
-#[test, expected_failure(abort_code = payment_standard::EInvalidNonce)]
+#[test, expected_failure(abort_code = payment_kit::EInvalidNonce)]
 fun test_nonce_too_long_failure() {
-    payment_standard::validate_nonce(&(b"1234567890123456789012345678901234567".to_ascii_string()));
+    payment_kit::validate_nonce(&(b"1234567890123456789012345678901234567".to_ascii_string()));
 }
 
 /// Tests the standalone process_ephemeral_payment function without registry.
 #[test]
 fun test_process_ephemeral_payment_standalone() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = payment_standard::process_ephemeral_payment<SUI>(
+        let _receipt = payment_kit::process_ephemeral_payment<SUI>(
             b"ephemeral-payment".to_ascii_string(),
             1500,
             create_test_coin(scenario, 1500),
@@ -507,10 +501,10 @@ fun test_process_ephemeral_payment_standalone() {
 }
 
 /// Tests the standalone process_ephemeral_payment function with an invalid nonce.
-#[test, expected_failure(abort_code = payment_standard::EInvalidNonce)]
+#[test, expected_failure(abort_code = payment_kit::EInvalidNonce)]
 fun test_process_ephemeral_payment_standalone_invalid_nonce() {
     test_tx!(|scenario, clock, registry, namespace| {
-        let _receipt = payment_standard::process_ephemeral_payment<SUI>(
+        let _receipt = payment_kit::process_ephemeral_payment<SUI>(
             b"".to_ascii_string(), // Empty nonce - should fail
             1000,
             create_test_coin(scenario, 1000),
@@ -589,7 +583,7 @@ fun test_registry_managed_funds_registry_as_receiver() {
 }
 
 /// Tests that providing a different receiver fails when registry_managed_funds is enabled.
-#[test, expected_failure(abort_code = payment_standard::ERegistryMustBeReceiver)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryMustBeReceiver)]
 fun test_registry_managed_funds_invalid_receiver() {
     test_tx!(|scenario, clock, registry, namespace| {
         let cap = scenario.take_from_sender<RegistryAdminCap>();
@@ -614,7 +608,7 @@ fun test_registry_managed_funds_invalid_receiver() {
 }
 
 /// Tests that receiver must be provided when registry_managed_funds is disabled.
-#[test, expected_failure(abort_code = payment_standard::EReceiverMustBeProvided)]
+#[test, expected_failure(abort_code = payment_kit::EReceiverMustBeProvided)]
 fun test_receiver_required_when_funds_not_managed() {
     test_tx!(|scenario, clock, registry, namespace| {
         let _receipt = registry.process_registry_payment<SUI>(
@@ -681,7 +675,7 @@ fun test_registry_managed_funds_multiple_payments() {
 }
 
 /// Tests that withdrawing from registry requires admin capability.
-#[test, expected_failure(abort_code = payment_standard::EUnauthorizedAdmin)]
+#[test, expected_failure(abort_code = payment_kit::EUnauthorizedAdmin)]
 fun test_registry_withdraw_unauthorized() {
     test_tx!(|scenario, clock, registry, namespace| {
         let cap = scenario.take_from_sender<RegistryAdminCap>();
@@ -713,7 +707,7 @@ fun test_registry_withdraw_unauthorized() {
 }
 
 /// Tests that withdrawing a balance of zero fails.
-#[test, expected_failure(abort_code = payment_standard::ERegistryBalanceDoesNotExist)]
+#[test, expected_failure(abort_code = payment_kit::ERegistryBalanceDoesNotExist)]
 fun test_registry_withdraw_balance_does_not_exist() {
     test_tx!(|scenario, clock, registry, namespace| {
         let cap = scenario.take_from_sender<RegistryAdminCap>();
@@ -739,7 +733,7 @@ fun test_registry_withdraw_balance_does_not_exist() {
 public macro fun test_tx($f: |&mut Scenario, &mut Clock, &mut PaymentRegistry, &mut Namespace|) {
     let mut scenario = test_scenario::begin(ALICE);
     let mut clock = clock::create_for_testing(scenario.ctx());
-    payment_standard::init_for_testing(scenario.ctx());
+    payment_kit::init_for_testing(scenario.ctx());
 
     scenario.next_tx(ALICE);
 

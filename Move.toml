@@ -1,8 +1,8 @@
 [package]
-name = "sui_payment_standard"
+name = "payment_kit"
 edition = "2024"
 
 [dependencies]
 
 [addresses]
-sui_payment_standard = "0x0"
+payment_kit = "0x0"

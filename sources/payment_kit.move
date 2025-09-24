@@ -1,8 +1,9 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-module sui_payment_standard::payment_standard;
+module payment_kit::payment_kit;
 
+use payment_kit::config::{Self, Value};
 use std::ascii::String;
 use std::type_name;
 use sui::balance::Balance;
@@ -12,7 +13,6 @@ use sui::derived_object;
 use sui::dynamic_field as df;
 use sui::event;
 use sui::vec_map::{Self, VecMap};
-use sui_payment_standard::registry_config_value::{Self, RegistryConfigValue};
 
 #[error(code = 0)]
 const EPaymentAlreadyExists: vector<u8> = b"Duplicate payment detected";
@@ -35,8 +35,7 @@ const ERegistryNameContainsInvalidCharacters: vector<u8> =
 #[error(code = 8)]
 const EInvalidNonce: vector<u8> = b"Nonce is invalid";
 #[error(code = 9)]
-const ERegistryMustBeReceiver: vector<u8> =
-    b"Registry is flagged to manage funds. Receiver must be either None or the registry itself";
+const ERegistryMustBeReceiver: vector<u8> = b"Receiver must be either None or the registry itself";
 #[error(code = 10)]
 const EReceiverMustBeProvided: vector<u8> =
     b"Receiver must be provided when a registry does not manage funds";
@@ -62,7 +61,7 @@ public struct Namespace has key {
 public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
-    config: VecMap<String, RegistryConfigValue>,
+    config: VecMap<String, Value>,
 }
 
 /// Admin capability for a payment registry, allowing management of the registry and its configurations.
@@ -282,7 +281,7 @@ public fun set_config_epoch_expiration_duration(
 
     registry.upsert_config(
         EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string(),
-        registry_config_value::new_u64(epoch_expiration_duration),
+        config::new_u64(epoch_expiration_duration),
     );
 }
 
@@ -298,7 +297,7 @@ public fun set_config_registry_managed_funds(
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
     registry.upsert_config(
         REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string(),
-        registry_config_value::new_bool(registry_managed_funds),
+        config::new_bool(registry_managed_funds),
     );
 }
 
@@ -345,11 +344,8 @@ public(package) fun validate_nonce(nonce: &String) {
 }
 
 /// Retrieves a configuration value from the registry's config map.
-/// Returns `Some(RegistryConfigValue)` if the configuration exists, otherwise `None`.
-public(package) fun try_get_config_value(
-    registry: &PaymentRegistry,
-    key: String,
-): Option<RegistryConfigValue> {
+/// Returns `Some(Value)` if the configuration exists, otherwise `None`.
+public(package) fun try_get_config_value(registry: &PaymentRegistry, key: String): Option<Value> {
     registry.config.try_get(&key)
 }
 
@@ -441,7 +437,7 @@ fun collect_payment<T>(registry: &mut PaymentRegistry, coin: Coin<T>) {
 
 /// Inserts or updates a configuration in the registry's config map.
 /// If a configuration with the same key already exists, it is replaced.
-fun upsert_config(registry: &mut PaymentRegistry, key: String, value: RegistryConfigValue) {
+fun upsert_config(registry: &mut PaymentRegistry, key: String, value: Value) {
     if (registry.config.contains(&key)) {
         registry.config.remove(&key);
     };
