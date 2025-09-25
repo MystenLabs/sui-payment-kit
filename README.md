@@ -9,6 +9,7 @@ The Sui Payment Kit is a Move smart contract framework that enables developers t
 ### Key Features
 
 - **Secure Payment Processing**: Built-in duplicate prevention and exact amount verification
+- **Payment Regitries**: Registries can be leveraged to custody payments, manage receipt lifetime, etc
 - **Flexible Receipt Management**: Optional receipt persistence with configurable expiration
 - **Event-Driven Architecture**: All payments emit events for off-chain tracking
 - **Admin Controls**: Capability-based access control for registry management
