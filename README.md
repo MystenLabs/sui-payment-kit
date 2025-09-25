@@ -28,19 +28,11 @@ The Sui Payment Kit consists of three main components:
 
 Sui Payment Kit prevents duplicate payments using a composite key derived from:
 
-- Payment ID (nonce)
-- Amount
-- Coin Type
-- Receiver Address
+- `Payment ID (nonce)`
+- `Amount`
+- `Coin Type`
+- `Receiver Address`
 
 This ensures the same payment cannot be processed twice.
 
 _Duplicate prevention is only enforced when processing payments via a `PaymentRegistry`. If duplicate prevention is not necessary there is an Ephemeral payment option._
-
-## Use Cases
-
-- **E-commerce Platforms**: Track customer payments and order fulfillment
-- **Subscription Services**: Manage recurring payments with receipt tracking
-- **Digital Marketplaces**: Process payments between buyers and sellers
-- **DeFi Applications**: Integrate payment verification into financial protocols
-- **Gaming Platforms**: Handle in-game purchases and microtransactions
