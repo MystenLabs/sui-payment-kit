@@ -42,8 +42,17 @@ const EReceiverMustBeProvided: vector<u8> =
 #[error(code = 11)]
 const ERegistryBalanceDoesNotExist: vector<u8> =
     b"Registry balance for this coin type does not exist";
+#[error(code = 12)]
+const EInvalidVersion: vector<u8> = b"Registry version is invalid";
 
 const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
+
+/// The compatibility version should only be bumped if we wanna disable
+/// previous versions of the package from being called for registry operations.
+///
+/// There's currently no upgrade path (version bump), until there's a good reason to
+/// block old versions.
+const COMPATIBILITY_VERSION: u16 = 0;
 
 const DEFAULT_PAYMENT_REGISTRY_NAME: vector<u8> = b"default-payment-registry";
 
@@ -62,6 +71,7 @@ public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
     config: VecMap<String, Value>,
+    version: u16,
 }
 
 /// Admin capability for a payment registry, allowing management of the registry and its configurations.
@@ -139,6 +149,7 @@ public fun create_registry(
             id: uid,
             cap_id: object::id(&cap),
             config: vec_map::empty(),
+            version: COMPATIBILITY_VERSION,
         },
         cap,
     )
@@ -179,6 +190,7 @@ public fun process_registry_payment<T>(
     clock: &Clock,
     ctx: &mut TxContext,
 ): PaymentReceipt {
+    registry.assert_is_valid_version();
     let funds_managed_by_registry = registry
         .config
         .try_get(&REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string())
@@ -225,6 +237,7 @@ public fun withdraw_from_registry<T>(
     ctx: &mut TxContext,
 ): Coin<T> {
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+    registry.assert_is_valid_version();
     let key = BalanceKey<T>();
 
     assert!(df::exists_(&registry.id, key), ERegistryBalanceDoesNotExist);
@@ -238,6 +251,7 @@ public fun delete_payment_record<T>(
     ctx: &mut TxContext,
 ) {
     assert!(df::exists_(&registry.id, payment_key), EPaymentRecordDoesNotExist);
+    registry.assert_is_valid_version();
 
     let expiration_duration = registry
         .config
@@ -278,6 +292,7 @@ public fun set_config_epoch_expiration_duration(
     _ctx: &mut TxContext,
 ) {
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+    registry.assert_is_valid_version();
 
     registry.upsert_config(
         EPOCH_EXPIRATION_DURATION_KEY.to_ascii_string(),
@@ -295,6 +310,7 @@ public fun set_config_registry_managed_funds(
     _ctx: &mut TxContext,
 ) {
     assert!(cap.is_valid_for(registry), EUnauthorizedAdmin);
+    registry.assert_is_valid_version();
     registry.upsert_config(
         REGISTRY_MANAGED_FUNDS_KEY.to_ascii_string(),
         config::new_bool(registry_managed_funds),
@@ -413,6 +429,12 @@ fun write_payment_record<T>(
         key,
         payment_record,
     );
+}
+
+/// Verify that the version of compatibility of the contract
+/// matches the registry's value
+fun assert_is_valid_version(registry: &PaymentRegistry) {
+    assert!(registry.version == COMPATIBILITY_VERSION, EInvalidVersion);
 }
 
 /// Convert Receipt into a key
