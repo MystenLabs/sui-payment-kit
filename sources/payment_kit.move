@@ -46,6 +46,12 @@ const ERegistryBalanceDoesNotExist: vector<u8> =
 const EInvalidVersion: vector<u8> = b"Registry version is invalid";
 
 const DEFAULT_EPOCH_EXPIRATION_DURATION: u64 = 30;
+
+/// The compatibility version should only be bumped if we wanna disable
+/// previous versions of the package from being called for registry operations.
+///
+/// There's currently no upgrade path (version bump), until there's a good reason to
+/// block old versions.
 const COMPATIBILITY_VERSION: u16 = 0;
 
 const DEFAULT_PAYMENT_REGISTRY_NAME: vector<u8> = b"default-payment-registry";
@@ -65,7 +71,7 @@ public struct PaymentRegistry has key {
     id: UID,
     cap_id: ID,
     config: VecMap<String, Value>,
-    version: u16
+    version: u16,
 }
 
 /// Admin capability for a payment registry, allowing management of the registry and its configurations.
@@ -425,6 +431,8 @@ fun write_payment_record<T>(
     );
 }
 
+/// Verify that the version of compatibility of the contract
+/// matches the registry's value
 fun assert_is_valid_version(registry: &PaymentRegistry) {
     assert!(registry.version == COMPATIBILITY_VERSION, EInvalidVersion);
 }
